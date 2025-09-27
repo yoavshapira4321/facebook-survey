@@ -60,36 +60,49 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Submit survey response
+// Submit survey response - UPDATED FOR NEW SURVEY FORMAT
 app.post('/api/survey', (req, res) => {
     try {
         console.log('Received survey submission');
         
-        const { satisfaction, recommend, improvements, platforms } = req.body;
+        // NEW: Accept the new survey format with categories
+        const { answers, categoryScores, totalScoreA, totalScoreB, totalScoreC, dominantCategory, totalYes, totalNo } = req.body;
         
-        // Validation
-        if (!satisfaction || !recommend) {
+        // NEW VALIDATION: Check if we have answers
+        if (!answers || Object.keys(answers).length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'Missing required fields: satisfaction and recommend are required'
+                error: 'No survey answers received'
             });
         }
 
-        // Create response object
+        // Create response object - UPDATED FOR NEW FORMAT
         const responseData = {
             id: 'resp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
             timestamp: new Date().toISOString(),
-            satisfaction: parseInt(satisfaction),
-            recommend: parseInt(recommend),
-            improvements: improvements || '',
-            platforms: platforms || [],
+            // New attachment style survey data
+            answers: answers,
+            categoryScores: categoryScores || { A: 0, B: 0, C: 0 },
+            totalScoreA: totalScoreA || 0,
+            totalScoreB: totalScoreB || 0,
+            totalScoreC: totalScoreC || 0,
+            dominantCategory: dominantCategory || 'Unknown',
+            totalYes: totalYes || 0,
+            totalNo: totalNo || 0,
+            totalQuestions: Object.keys(answers).length,
+            // Technical info
             userAgent: req.body.userAgent || req.get('User-Agent'),
             ip: req.ip || req.connection.remoteAddress,
             referrer: req.body.referrer || '',
             pageUrl: req.body.pageUrl || ''
         };
 
-        console.log('Processed response:', responseData);
+        console.log('Processed response:', {
+            id: responseData.id,
+            totalAnswers: Object.keys(answers).length,
+            categoryScores: responseData.categoryScores,
+            dominantCategory: responseData.dominantCategory
+        });
 
         // Read existing data
         const existingData = readSurveyData();
@@ -109,7 +122,9 @@ app.post('/api/survey', (req, res) => {
             message: 'Survey response saved successfully',
             responseId: responseData.id,
             timestamp: responseData.timestamp,
-            totalResponses: existingData.length
+            totalResponses: existingData.length,
+            scores: responseData.categoryScores,
+            dominantCategory: responseData.dominantCategory
         });
 
     } catch (error) {
@@ -121,7 +136,7 @@ app.post('/api/survey', (req, res) => {
     }
 });
 
-// Get all survey responses (for admin)
+// Get all survey responses (for admin) - UPDATED
 app.get('/api/responses', (req, res) => {
     try {
         const data = readSurveyData();
@@ -141,32 +156,32 @@ app.get('/api/responses', (req, res) => {
     }
 });
 
-// Get survey statistics
+// Get survey statistics - UPDATED FOR NEW FORMAT
 app.get('/api/stats', (req, res) => {
     try {
         const data = readSurveyData();
         
         const stats = {
             totalResponses: data.length,
-            averageSatisfaction: 0,
-            averageRecommendation: 0,
-            platforms: {},
-            recentSubmissions: data.slice(-10).reverse() // Last 10 submissions
+            averageScores: { A: 0, B: 0, C: 0 },
+            dominantCategories: { A: 0, B: 0, C: 0, Tie: 0, Unknown: 0 },
+            recentSubmissions: data.slice(-10).reverse()
         };
         
         if (data.length > 0) {
-            // Calculate averages
-            stats.averageSatisfaction = (data.reduce((sum, resp) => sum + resp.satisfaction, 0) / data.length).toFixed(2);
-            stats.averageRecommendation = (data.reduce((sum, resp) => sum + resp.recommend, 0) / data.length).toFixed(2);
+            // Calculate average scores for each category
+            const totalA = data.reduce((sum, resp) => sum + (resp.totalScoreA || 0), 0);
+            const totalB = data.reduce((sum, resp) => sum + (resp.totalScoreB || 0), 0);
+            const totalC = data.reduce((sum, resp) => sum + (resp.totalScoreC || 0), 0);
             
-            // Platform usage
+            stats.averageScores.A = (totalA / data.length).toFixed(2);
+            stats.averageScores.B = (totalB / data.length).toFixed(2);
+            stats.averageScores.C = (totalC / data.length).toFixed(2);
+            
+            // Count dominant categories
             data.forEach(response => {
-                if (response.platforms) {
-                    const platforms = Array.isArray(response.platforms) ? response.platforms : [response.platforms];
-                    platforms.forEach(platform => {
-                        stats.platforms[platform] = (stats.platforms[platform] || 0) + 1;
-                    });
-                }
+                const category = response.dominantCategory || 'Unknown';
+                stats.dominantCategories[category] = (stats.dominantCategories[category] || 0) + 1;
             });
         }
         
@@ -182,7 +197,7 @@ app.get('/api/stats', (req, res) => {
     }
 });
 
-// Download responses as CSV
+// Download responses as CSV - UPDATED FOR NEW FORMAT
 app.get('/api/responses/csv', (req, res) => {
     try {
         const data = readSurveyData();
@@ -194,7 +209,7 @@ app.get('/api/responses/csv', (req, res) => {
         const csv = convertToCSV(data);
         
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=survey-responses-${Date.now()}.csv`);
+        res.setHeader('Content-Disposition', `attachment; filename=attachment-survey-responses-${Date.now()}.csv`);
         res.send(csv);
         
     } catch (error) {
@@ -202,6 +217,32 @@ app.get('/api/responses/csv', (req, res) => {
         res.status(500).json({ error: 'Failed to generate CSV' });
     }
 });
+
+// CSV conversion helper - UPDATED FOR NEW FORMAT
+function convertToCSV(objArray) {
+    if (objArray.length === 0) return 'No data available';
+    
+    const headers = ['ID', 'Timestamp', 'Score A', 'Score B', 'Score C', 'Dominant Category', 'Total Yes', 'Total No', 'Total Questions', 'IP Address'];
+    let csv = headers.join(',') + '\n';
+    
+    objArray.forEach(item => {
+        const row = [
+            `"${item.id || ''}"`,
+            `"${item.timestamp || ''}"`,
+            item.totalScoreA || 0,
+            item.totalScoreB || 0,
+            item.totalScoreC || 0,
+            `"${item.dominantCategory || 'Unknown'}"`,
+            item.totalYes || 0,
+            item.totalNo || 0,
+            item.totalQuestions || 0,
+            `"${item.ip || ''}"`
+        ];
+        csv += row.join(',') + '\n';
+    });
+    
+    return csv;
+}
 
 // Delete all responses (admin only)
 app.delete('/api/responses', (req, res) => {
@@ -237,60 +278,6 @@ app.delete('/api/responses', (req, res) => {
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// CSV conversion helper
-function convertToCSV(objArray) {
-    if (objArray.length === 0) return 'No data available';
-    
-    const headers = ['ID', 'Timestamp', 'Satisfaction', 'Recommendation', 'Improvements', 'Platforms', 'IP Address'];
-    let csv = headers.join(',') + '\n';
-    
-    objArray.forEach(item => {
-        const row = [
-            `"${item.id || ''}"`,
-            `"${item.timestamp || ''}"`,
-            item.satisfaction || '',
-            item.recommend || '',
-            `"${(item.improvements || '').replace(/"/g, '""')}"`,
-            `"${(Array.isArray(item.platforms) ? item.platforms.join('; ') : item.platforms || '').replace(/"/g, '""')}"`,
-            `"${item.ip || ''}"`
-        ];
-        csv += row.join(',') + '\n';
-    });
-    
-    return csv;
-}
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
-    res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-    });
-});
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        error: 'Endpoint not found'
-    });
-});
-
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Survey server running on port ${PORT}`);
-    console.log(`📊 Access the survey at: http://localhost:${PORT}`);
-    console.log(`🔧 API health check: http://localhost:${PORT}/api/health`);
-    console.log(`📈 View stats: http://localhost:${PORT}/api/stats`);
-    
-    // Test data file
-    const data = readSurveyData();
-    console.log(`💾 Loaded ${data.length} existing survey responses`);
-});
-
-// Add this to your server.js routes
 
 // Save Facebook address
 app.post('/api/survey/facebook', (req, res) => {
@@ -331,26 +318,19 @@ app.post('/api/survey/facebook', (req, res) => {
     }
 });
 
-// Add this to your server.js routes
-
 // Send email with results
 app.post('/api/send-email', (req, res) => {
     try {
         const { toEmail, subject, results, timestamp } = req.body;
         
-        // In a real implementation, you would integrate with an email service like:
-        // - Nodemailer (for Gmail, SMTP)
-        // - SendGrid API
-        // - Mailgun API
-        // - AWS SES
-        
-        // For now, we'll simulate email sending and log the details
-        console.log('=== EMAIL SENDING REQUEST ===');
+        console.log('=== ATTACHMENT SURVEY EMAIL REQUEST ===');
         console.log('To:', toEmail);
         console.log('Subject:', subject);
-        console.log('Results:', JSON.stringify(results, null, 2));
-        console.log('Timestamp:', timestamp);
-        console.log('=============================');
+        console.log('Response ID:', results.responseId);
+        console.log('Dominant Category:', results.dominantCategory);
+        console.log('Scores - A:', results.categoryScores?.A, 'B:', results.categoryScores?.B, 'C:', results.categoryScores?.C);
+        console.log('Total Questions:', results.totalQuestions);
+        console.log('========================================');
         
         // Simulate email processing delay
         setTimeout(() => {
@@ -359,7 +339,10 @@ app.post('/api/send-email', (req, res) => {
                 id: 'email_' + Date.now(),
                 toEmail: toEmail,
                 subject: subject,
-                results: results,
+                responseId: results.responseId,
+                dominantCategory: results.dominantCategory,
+                scores: results.categoryScores,
+                totalQuestions: results.totalQuestions,
                 sentAt: new Date().toISOString(),
                 status: 'sent'
             };
@@ -418,4 +401,33 @@ app.get('/api/emails', (req, res) => {
             error: 'Failed to load email records'
         });
     }
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+    console.error('Unhandled error:', error);
+    res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+    });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: 'Endpoint not found'
+    });
+});
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Attachment Survey server running on port ${PORT}`);
+    console.log(`📊 Access the survey at: http://localhost:${PORT}`);
+    console.log(`🔧 API health check: http://localhost:${PORT}/api/health`);
+    console.log(`📈 View stats: http://localhost:${PORT}/api/stats`);
+    
+    // Test data file
+    const data = readSurveyData();
+    console.log(`💾 Loaded ${data.length} existing survey responses`);
 });

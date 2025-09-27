@@ -1,0 +1,16 @@
+[
+  {
+    "id": "email_1759013389018",
+    "toEmail": "yoavshapira4321@gmail.com",
+    "subject": "Attachment Style Assessment Results - 1759013388007",
+    "dominantCategory": "C",
+    "scores": {
+      "A": 8,
+      "B": 7,
+      "C": 9
+    },
+    "totalQuestions": 42,
+    "sentAt": "2025-09-27T22:49:49.018Z",
+    "status": "sent"
+  }
+]
