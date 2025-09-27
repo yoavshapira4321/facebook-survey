@@ -1,13 +1,23 @@
 let currentQuestion = 0;
 const totalQuestions = document.querySelectorAll('.question').length;
 
+// Counters for each category
+let categoryCounters = {
+    A: 0,  // Anxious category
+    B: 0,  // Secure category  
+    C: 0   // Avoidant category
+};
+
 // Backend configuration - will work relative to the same domain
-const API_BASE_URL = window.location.origin; // Uses same domain as the frontend
+const API_BASE_URL = window.location.origin;
 
 function startSurvey() {
     document.getElementById('welcome-screen').classList.remove('active');
     document.getElementById('survey-form').classList.add('active');
     updateProgress();
+    
+    // Reset counters when survey starts
+    resetCategoryCounters();
 }
 
 function showQuestion(index) {
@@ -46,7 +56,23 @@ function updateProgress() {
     document.querySelector('.progress').style.width = `${progress}%`;
 }
 
-// Enhanced form submission with Node.js backend integration
+// Reset all category counters
+function resetCategoryCounters() {
+    categoryCounters = { A: 0, B: 0, C: 0 };
+}
+
+// Update category counters based on answer
+function updateCategoryCounters(questionElement, answerValue) {
+    const category = questionElement.getAttribute('data-category');
+    const isPositiveAnswer = answerValue === "1"; // "1" represents YES
+    
+    if (isPositiveAnswer && category) {
+        categoryCounters[category]++;
+        console.log(`Category ${category} counter increased to: ${categoryCounters[category]}`);
+    }
+}
+
+// Enhanced form submission with category tracking
 document.getElementById('survey-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -58,7 +84,7 @@ document.getElementById('survey-form').addEventListener('submit', async function
     
     try {
         const formData = collectFormData();
-        console.log('Submitting survey data:', formData);
+        console.log('Submitting survey data with categories:', formData);
         
         // Submit to backend
         const result = await submitToBackend(formData);
@@ -87,27 +113,57 @@ function collectFormData() {
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
         referrer: document.referrer,
-        pageUrl: window.location.href
+        pageUrl: window.location.href,
+        categoryScores: { ...categoryCounters }, // Store category counters
+        totalScoreA: categoryCounters.A,
+        totalScoreB: categoryCounters.B, 
+        totalScoreC: categoryCounters.C
     };
     
-    // Convert FormData to object
+    // Process all question answers
+    const answers = {};
+    let totalYesAnswers = 0;
+    let totalNoAnswers = 0;
+    
+    // Convert FormData to object and track answers
     for (let [key, value] of formData.entries()) {
-        if (data[key]) {
-            if (!Array.isArray(data[key])) {
-                data[key] = [data[key]];
-            }
-            data[key].push(value);
-        } else {
-            data[key] = value;
+        answers[key] = value;
+        
+        // Count YES/NO answers
+        if (value === "1") totalYesAnswers++;
+        if (value === "2") totalNoAnswers++;
+        
+        // Update category counters for each answer
+        const questionElement = document.querySelector(`[name="${key}"]`).closest('.question');
+        if (questionElement) {
+            updateCategoryCounters(questionElement, value);
         }
     }
     
-    // Handle checkbox groups properly
-    if (data.platforms && !Array.isArray(data.platforms)) {
-        data.platforms = [data.platforms];
-    }
+    data.answers = answers;
+    data.totalYes = totalYesAnswers;
+    data.totalNo = totalNoAnswers;
+    data.totalQuestions = totalQuestions;
+    
+    // Calculate percentages
+    data.percentageYes = totalYesAnswers > 0 ? Math.round((totalYesAnswers / totalQuestions) * 100) : 0;
+    data.percentageNo = totalNoAnswers > 0 ? Math.round((totalNoAnswers / totalQuestions) * 100) : 0;
+    
+    // Determine dominant category
+    data.dominantCategory = getDominantCategory();
+    
+    console.log('Final category scores:', categoryCounters);
+    console.log('Dominant category:', data.dominantCategory);
     
     return data;
+}
+
+function getDominantCategory() {
+    const scores = Object.entries(categoryCounters);
+    const maxScore = Math.max(...scores.map(([_, score]) => score));
+    const dominantCategories = scores.filter(([_, score]) => score === maxScore).map(([cat]) => cat);
+    
+    return dominantCategories.length === 1 ? dominantCategories[0] : 'Tie';
 }
 
 async function submitToBackend(data) {
@@ -154,13 +210,16 @@ function showThankYouScreen(result) {
     document.getElementById('survey-form').classList.remove('active');
     document.getElementById('thank-you-screen').classList.add('active');
     
+    // Display category results
+    displayCategoryResults();
+    
     // Update with backend response data
     const messageElement = document.getElementById('submission-message');
     const responseIdElement = document.getElementById('response-id');
     const statsElement = document.getElementById('response-stats');
     
     if (messageElement) {
-        messageElement.innerHTML = '✅ <strong>Success!</strong> Your response has been saved to our database.';
+        messageElement.innerHTML = '✅ <strong>Success!</strong> Your attachment style assessment has been saved.';
     }
     
     if (responseIdElement && result.responseId) {
@@ -176,6 +235,50 @@ function showThankYouScreen(result) {
     showResponseCount();
 }
 
+function displayCategoryResults() {
+    const resultsContainer = document.getElementById('category-results');
+    if (!resultsContainer) return;
+    
+    const dominantCategory = getDominantCategory();
+    const categoryLabels = {
+        A: 'Anxious Attachment Style',
+        B: 'Secure Attachment Style', 
+        C: 'Avoidant Attachment Style'
+    };
+    
+    const categoryDescriptions = {
+        A: 'You may experience anxiety in relationships and seek high levels of intimacy and approval.',
+        B: 'You feel comfortable with intimacy and are generally warm and loving in relationships.',
+        C: 'You value independence and may feel uncomfortable with too much closeness.'
+    };
+    
+    resultsContainer.innerHTML = `
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+            <h3>📊 Your Attachment Style Results</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #e74c3c;">
+                    <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">${categoryCounters.A}</div>
+                    <div style="font-size: 14px; color: #666;">Anxious (A)</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #27ae60;">
+                    <div style="font-size: 24px; font-weight: bold; color: #27ae60;">${categoryCounters.B}</div>
+                    <div style="font-size: 14px; color: #666;">Secure (B)</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #3498db;">
+                    <div style="font-size: 24px; font-weight: bold; color: #3498db;">${categoryCounters.C}</div>
+                    <div style="font-size: 14px; color: #666;">Avoidant (C)</div>
+                </div>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #f39c12;">
+                <strong>Dominant Style: ${categoryLabels[dominantCategory] || 'Mixed'}</strong>
+                <p style="margin: 10px 0 0 0; font-size: 14px; color: #666;">
+                    ${categoryDescriptions[dominantCategory] || 'You show characteristics of multiple attachment styles.'}
+                </p>
+            </div>
+        </div>
+    `;
+}
+
 function showErrorScreen(errorMessage) {
     document.getElementById('survey-form').classList.remove('active');
     document.getElementById('thank-you-screen').classList.add('active');
@@ -185,6 +288,7 @@ function showErrorScreen(errorMessage) {
         messageElement.innerHTML = `⚠️ <strong>Saved Locally:</strong> Response saved to browser (${errorMessage}).`;
     }
     
+    displayCategoryResults();
     showResponseCount();
 }
 
@@ -209,8 +313,6 @@ function displayStatistics(stats) {
         <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 15px 0;">
             <h4>📊 Survey Statistics</h4>
             <div>Total Responses: <strong>${stats.totalResponses}</strong></div>
-            <div>Average Satisfaction: <strong>${stats.averageSatisfaction}/5</strong></div>
-            <div>Average Recommendation: <strong>${stats.averageRecommendation}/5</strong></div>
         </div>
     `;
 }
@@ -239,13 +341,21 @@ function showResponseCount() {
 // Social sharing functions
 function shareOnFacebook() {
     const surveyUrl = window.location.href;
-    const facebookShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(surveyUrl)}&quote=I just completed this survey! Check it out.`;
+    const dominantCategory = getDominantCategory();
+    const categoryLabels = {
+        A: 'Anxious Attachment Style',
+        B: 'Secure Attachment Style',
+        C: 'Avoidant Attachment Style'
+    };
+    
+    const shareText = `I just discovered my attachment style is ${categoryLabels[dominantCategory]}! Take the attachment style assessment too:`;
+    const facebookShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(surveyUrl)}&quote=${encodeURIComponent(shareText)}`;
     window.open(facebookShareUrl, '_blank', 'width=600,height=400');
 }
 
 function shareOnTwitter() {
     const surveyUrl = window.location.href;
-    const twitterShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(surveyUrl)}&text=I just completed this survey!`;
+    const twitterShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(surveyUrl)}&text=I just took the attachment style assessment!`;
     window.open(twitterShareUrl, '_blank', 'width=600,height=400');
 }
 
@@ -264,14 +374,13 @@ async function downloadResponses() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `survey-responses-${Date.now()}.csv`;
+        a.download = `attachment-survey-responses-${Date.now()}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
     } catch (error) {
         console.error('Error downloading CSV:', error);
-        // Fallback to localStorage download
         downloadLocalResponses();
     }
 }
@@ -284,7 +393,7 @@ function downloadLocalResponses() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `survey-backup-${Date.now()}.csv`;
+        a.download = `attachment-survey-backup-${Date.now()}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -297,17 +406,18 @@ function downloadLocalResponses() {
 function convertToCSV(objArray) {
     if (objArray.length === 0) return 'No data available';
     
-    const headers = ['ID', 'Timestamp', 'Satisfaction', 'Recommendation', 'Improvements', 'Platforms', 'Status'];
+    const headers = ['Timestamp', 'Total Score A', 'Total Score B', 'Total Score C', 'Dominant Category', 'Total Yes', 'Total No', 'Status'];
     let str = headers.join(',') + '\r\n';
     
     for (let i = 0; i < objArray.length; i++) {
         let line = [
-            objArray[i].id || objArray[i].backupId || '',
             objArray[i].timestamp || '',
-            objArray[i].satisfaction || '',
-            objArray[i].recommend || '',
-            `"${(objArray[i].improvements || '').replace(/"/g, '""')}"`,
-            `"${(Array.isArray(objArray[i].platforms) ? objArray[i].platforms.join('; ') : objArray[i].platforms || '').replace(/"/g, '""')}"`,
+            objArray[i].totalScoreA || 0,
+            objArray[i].totalScoreB || 0,
+            objArray[i].totalScoreC || 0,
+            objArray[i].dominantCategory || '',
+            objArray[i].totalYes || 0,
+            objArray[i].totalNo || 0,
             objArray[i].localBackup ? 'Local Backup' : 'Online'
         ].join(',');
         str += line + '\r\n';
