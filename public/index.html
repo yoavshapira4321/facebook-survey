@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Survey</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="survey-container">
+        <div id="welcome-screen" class="screen active">
+            <h1>Customer Satisfaction Survey</h1>
+            <p>Thank you for participating! This survey will take about 2 minutes.</p>
+            <button onclick="startSurvey()">Start Survey</button>
+        </div>
+
+        <form id="survey-form" class="screen">
+            <!-- Question 1 -->
+            <div class="question active">
+                <h2>How satisfied are you with our product?</h2>
+                <div class="options">
+                    <label><input type="radio" name="satisfaction" value="5" required> Very Satisfied</label>
+                    <label><input type="radio" name="satisfaction" value="4"> Satisfied</label>
+                    <label><input type="radio" name="satisfaction" value="3"> Neutral</label>
+                    <label><input type="radio" name="satisfaction" value="2"> Dissatisfied</label>
+                    <label><input type="radio" name="satisfaction" value="1"> Very Dissatisfied</label>
+                </div>
+            </div>
+
+            <!-- Question 2 -->
+            <div class="question">
+                <h2>How likely are you to recommend us to others?</h2>
+                <div class="options">
+                    <label><input type="radio" name="recommend" value="5" required> Very Likely</label>
+                    <label><input type="radio" name="recommend" value="4"> Likely</label>
+                    <label><input type="radio" name="recommend" value="3"> Neutral</label>
+                    <label><input type="radio" name="recommend" value="2"> Unlikely</label>
+                    <label><input type="radio" name="recommend" value="1"> Very Unlikely</label>
+                </div>
+            </div>
+
+            <!-- Question 3 -->
+            <div class="question">
+                <h2>What features would you like to see improved?</h2>
+                <textarea name="improvements" placeholder="Your suggestions..." rows="4"></textarea>
+            </div>
+
+            <!-- Question 4 -->
+            <div class="question">
+                <h2>Which social media platforms do you use regularly?</h2>
+                <div class="options">
+                    <label><input type="checkbox" name="platforms" value="facebook"> Facebook</label>
+                    <label><input type="checkbox" name="platforms" value="instagram"> Instagram</label>
+                    <label><input type="checkbox" name="platforms" value="twitter"> Twitter</label>
+                    <label><input type="checkbox" name="platforms" value="linkedin"> LinkedIn</label>
+                    <label><input type="checkbox" name="platforms" value="tiktok"> TikTok</label>
+                </div>
+            </div>
+
+            <div class="navigation">
+                <button type="button" onclick="previousQuestion()" id="prev-btn" disabled>Previous</button>
+                <button type="button" onclick="nextQuestion()" id="next-btn">Next</button>
+                <button type="submit" id="submit-btn" style="display: none;">Submit Survey</button>
+            </div>
+        </form>
+
+        <div id="thank-you-screen" class="screen">
+            <h1>Thank You!</h1>
+            <p>Your responses have been recorded. We appreciate your feedback!</p>
+            <button onclick="shareOnFacebook()">Share on Facebook</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
