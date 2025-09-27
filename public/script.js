@@ -8,6 +8,9 @@ let categoryCounters = {
     C: 0   // Avoidant category
 };
 
+// Track which questions have been counted to avoid duplicates
+let countedQuestions = new Set();
+
 // Backend configuration - will work relative to the same domain
 const API_BASE_URL = window.location.origin;
 
@@ -59,16 +62,26 @@ function updateProgress() {
 // Reset all category counters
 function resetCategoryCounters() {
     categoryCounters = { A: 0, B: 0, C: 0 };
+    countedQuestions.clear();
 }
 
-// Update category counters based on answer
-function updateCategoryCounters(questionElement, answerValue) {
+// Update category counters based on answer (only once per question)
+function updateCategoryCounters(questionName, answerValue) {
+    // Skip if we've already counted this question
+    if (countedQuestions.has(questionName)) {
+        return;
+    }
+    
+    const questionElement = document.querySelector(`[name="${questionName}"]`).closest('.question');
+    if (!questionElement) return;
+    
     const category = questionElement.getAttribute('data-category');
     const isPositiveAnswer = answerValue === "1"; // "1" represents YES
     
     if (isPositiveAnswer && category) {
         categoryCounters[category]++;
-        console.log(`Category ${category} counter increased to: ${categoryCounters[category]}`);
+        countedQuestions.add(questionName); // Mark as counted
+        console.log(`Category ${category} counter increased to: ${categoryCounters[category]} for question ${questionName}`);
     }
 }
 
@@ -133,11 +146,8 @@ function collectFormData() {
         if (value === "1") totalYesAnswers++;
         if (value === "2") totalNoAnswers++;
         
-        // Update category counters for each answer
-        const questionElement = document.querySelector(`[name="${key}"]`).closest('.question');
-        if (questionElement) {
-            updateCategoryCounters(questionElement, value);
-        }
+        // Update category counters for each answer (only once)
+        updateCategoryCounters(key, value);
     }
     
     data.answers = answers;
@@ -153,6 +163,7 @@ function collectFormData() {
     data.dominantCategory = getDominantCategory();
     
     console.log('Final category scores:', categoryCounters);
+    console.log('Questions counted:', countedQuestions.size);
     console.log('Dominant category:', data.dominantCategory);
     
     return data;
