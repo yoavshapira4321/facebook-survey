@@ -359,10 +359,63 @@
         </div>
         </form>
 
-        <div id="thank-you-screen" class="screen">
+    <div id="thank-you-screen" class="screen">
     <h1>Thank You! 📊</h1>
+
     <p id="submission-message">Your attachment style assessment has been completed!</p>
     <p><strong>Response ID:</strong> <span id="response-id">Loading...</span></p>
+    
+    <!-- Email Results Section -->
+    <div id="email-results-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+        <h3>📧 Receive Your Detailed Results</h3>
+        <p>Click below to send your comprehensive attachment style analysis to our team:</p>
+        
+        <button 
+            onclick="sendResultsToEmail()" 
+            id="email-results-btn"
+            style="padding: 15px 25px; background: #ea4335; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; gap: 10px;"
+        >
+            <span>📨</span>
+            Send Results to Our Team
+        </button>
+        
+        <p style="font-size: 12px; color: #666; margin: 10px 0;">
+            💡 Our relationship experts will review your results and may follow up with personalized insights.
+        </p>
+        
+        <div id="email-submission-status" style="margin-top: 15px;"></div>
+    </div>
+
+
+    <!-- Facebook Address Input -->
+    <div id="facebook-address-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+        <h3>📬 Get Your Results on Facebook</h3>
+        <p>Enter your Facebook profile link to receive your detailed results:</p>
+        
+        <div style="display: flex; gap: 10px; margin: 15px 0;">
+            <input 
+                type="text" 
+                id="facebook-address" 
+                placeholder="https://facebook.com/yourprofile or https://fb.com/yourprofile"
+                style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;"
+            >
+            <button 
+                onclick="submitFacebookAddress()" 
+                style="padding: 12px 20px; background: #1877f2; color: white; border: none; border-radius: 8px; cursor: pointer;"
+            >
+                Send Results
+            </button>
+        </div>
+        
+        <p style="font-size: 12px; color: #666; margin: 5px 0;">
+            💡 <strong>How to find your Facebook profile link:</strong><br>
+            • Go to your Facebook profile<br>
+            • Copy the URL from your browser's address bar<br>
+            • It should look like: <code>https://facebook.com/your.name</code>
+        </p>
+        
+        <div id="facebook-submission-status" style="margin-top: 10px;"></div>
+    </div>
     
     <!-- Added text paragraph -->
     <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">

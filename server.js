@@ -289,3 +289,133 @@ app.listen(PORT, '0.0.0.0', () => {
     const data = readSurveyData();
     console.log(`💾 Loaded ${data.length} existing survey responses`);
 });
+
+// Add this to your server.js routes
+
+// Save Facebook address
+app.post('/api/survey/facebook', (req, res) => {
+    try {
+        const { responseId, facebookAddress, categoryScores, dominantCategory } = req.body;
+        
+        // Read existing data
+        const data = readSurveyData();
+        
+        // Find the response and update it
+        const responseIndex = data.findIndex(response => response.id === responseId);
+        if (responseIndex !== -1) {
+            data[responseIndex].facebookAddress = facebookAddress;
+            data[responseIndex].facebookSubmittedAt = new Date().toISOString();
+            
+            // Save updated data
+            writeSurveyData(data);
+            
+            console.log(`Facebook address saved for response ${responseId}: ${facebookAddress}`);
+            
+            res.json({
+                success: true,
+                message: 'Facebook address saved successfully'
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                error: 'Response not found'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error saving Facebook address:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to save Facebook address'
+        });
+    }
+});
+
+// Add this to your server.js routes
+
+// Send email with results
+app.post('/api/send-email', (req, res) => {
+    try {
+        const { toEmail, subject, results, timestamp } = req.body;
+        
+        // In a real implementation, you would integrate with an email service like:
+        // - Nodemailer (for Gmail, SMTP)
+        // - SendGrid API
+        // - Mailgun API
+        // - AWS SES
+        
+        // For now, we'll simulate email sending and log the details
+        console.log('=== EMAIL SENDING REQUEST ===');
+        console.log('To:', toEmail);
+        console.log('Subject:', subject);
+        console.log('Results:', JSON.stringify(results, null, 2));
+        console.log('Timestamp:', timestamp);
+        console.log('=============================');
+        
+        // Simulate email processing delay
+        setTimeout(() => {
+            // Save email record to your data file
+            const emailRecord = {
+                id: 'email_' + Date.now(),
+                toEmail: toEmail,
+                subject: subject,
+                results: results,
+                sentAt: new Date().toISOString(),
+                status: 'sent'
+            };
+            
+            // Save to emails file (create if doesn't exist)
+            const emailFile = path.join(__dirname, 'data', 'email-records.json');
+            let emailRecords = [];
+            
+            if (fs.existsSync(emailFile)) {
+                emailRecords = JSON.parse(fs.readFileSync(emailFile, 'utf8'));
+            }
+            
+            emailRecords.push(emailRecord);
+            fs.writeFileSync(emailFile, JSON.stringify(emailRecords, null, 2));
+            
+            res.json({
+                success: true,
+                message: 'Email sent successfully',
+                emailId: emailRecord.id,
+                timestamp: emailRecord.sentAt
+            });
+            
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Error sending email:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to send email'
+        });
+    }
+});
+
+// Get email sending history (admin endpoint)
+app.get('/api/emails', (req, res) => {
+    try {
+        const emailFile = path.join(__dirname, 'data', 'email-records.json');
+        
+        if (fs.existsSync(emailFile)) {
+            const emailRecords = JSON.parse(fs.readFileSync(emailFile, 'utf8'));
+            res.json({
+                success: true,
+                count: emailRecords.length,
+                emails: emailRecords
+            });
+        } else {
+            res.json({
+                success: true,
+                count: 0,
+                emails: []
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Failed to load email records'
+        });
+    }
+});

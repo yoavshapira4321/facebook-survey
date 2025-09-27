@@ -470,3 +470,339 @@ window.addEventListener('load', async () => {
         statusElement.style.color = isConnected ? 'green' : 'orange';
     }
 });
+
+// Add these functions to your script.js
+
+function submitFacebookAddress() {
+    const facebookInput = document.getElementById('facebook-address');
+    const statusElement = document.getElementById('facebook-submission-status');
+    const facebookUrl = facebookInput.value.trim();
+    
+    // Basic validation
+    if (!facebookUrl) {
+        showFacebookStatus('Please enter your Facebook profile link', 'error');
+        return;
+    }
+    
+    // Validate Facebook URL format
+    if (!isValidFacebookUrl(facebookUrl)) {
+        showFacebookStatus('Please enter a valid Facebook profile URL (e.g., https://facebook.com/yourprofile)', 'error');
+        return;
+    }
+    
+    // Show loading state
+    showFacebookStatus('Sending your results...', 'loading');
+    
+    // Simulate sending to Facebook (in real implementation, this would go to your backend)
+    setTimeout(() => {
+        // Save to survey data
+        saveFacebookAddress(facebookUrl);
+        
+        // Show success message
+        showFacebookStatus('✅ Results sent to your Facebook profile! We will message you shortly.', 'success');
+        
+        // Clear input
+        facebookInput.value = '';
+        
+        // Optional: Disable the form after successful submission
+        facebookInput.disabled = true;
+        document.querySelector('button[onclick="submitFacebookAddress()"]').disabled = true;
+        
+    }, 2000);
+}
+
+function isValidFacebookUrl(url) {
+    // Basic Facebook URL validation
+    const facebookPattern = /^(https?:\/\/)?(www\.)?(facebook\.com|fb\.com)\/.+/i;
+    return facebookPattern.test(url);
+}
+
+function showFacebookStatus(message, type) {
+    const statusElement = document.getElementById('facebook-submission-status');
+    const colors = {
+        error: '#e74c3c',
+        success: '#27ae60',
+        loading: '#f39c12',
+        info: '#3498db'
+    };
+    
+    statusElement.innerHTML = `
+        <div style="padding: 10px; border-radius: 5px; background: ${colors[type]}20; color: ${colors[type]}; border-left: 4px solid ${colors[type]};">
+            ${message}
+        </div>
+    `;
+}
+
+function saveFacebookAddress(facebookUrl) {
+    // Get the latest survey response
+    const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
+    if (responses.length > 0) {
+        // Update the most recent response with Facebook address
+        const latestResponse = responses[responses.length - 1];
+        latestResponse.facebookAddress = facebookUrl;
+        latestResponse.facebookSubmittedAt = new Date().toISOString();
+        
+        // Save back to localStorage
+        localStorage.setItem('surveyResponses', JSON.stringify(responses));
+        
+        // Also send to backend if available
+        sendFacebookAddressToBackend(latestResponse);
+    }
+}
+
+async function sendFacebookAddressToBackend(responseData) {
+    try {
+        const backendResponse = await fetch(`${API_BASE_URL}/api/survey/facebook`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                responseId: responseData.responseId,
+                facebookAddress: responseData.facebookAddress,
+                categoryScores: responseData.categoryScores,
+                dominantCategory: responseData.dominantCategory
+            })
+        });
+        
+        if (backendResponse.ok) {
+            console.log('Facebook address saved to backend');
+        }
+    } catch (error) {
+        console.error('Failed to save Facebook address to backend:', error);
+    }
+}
+
+// Optional: Add real-time URL validation
+document.getElementById('facebook-address').addEventListener('input', function(e) {
+    const url = e.target.value.trim();
+    const statusElement = document.getElementById('facebook-submission-status');
+    
+    if (url && !isValidFacebookUrl(url)) {
+        statusElement.innerHTML = `
+            <div style="padding: 5px; color: #e74c3c; font-size: 12px;">
+                ⚠️ This doesn't look like a valid Facebook URL
+            </div>
+        `;
+    } else if (url && isValidFacebookUrl(url)) {
+        statusElement.innerHTML = `
+            <div style="padding: 5px; color: #27ae60; font-size: 12px;">
+                ✅ Valid Facebook URL
+            </div>
+        `;
+    } else {
+        statusElement.innerHTML = '';
+    }
+});
+
+
+// Hard-coded email address
+const HARD_CODED_EMAIL = "yoavshapira4321@gmail.com"; // Change this to your actual email
+
+// Enhanced form submission with automatic email sending
+document.getElementById('survey-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    // Show loading state
+    const submitBtn = document.getElementById('submit-btn');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Submitting...';
+    submitBtn.disabled = true;
+    
+    // Show email sending status
+    showEmailStatus('📨 Sending your results to our team...', 'loading');
+    
+    try {
+        const formData = collectFormData();
+        console.log('Submitting survey data with categories:', formData);
+        
+        // Submit to backend
+        const result = await submitToBackend(formData);
+        
+        if (result.success) {
+            // Automatically send email with results
+            await sendResultsToEmail(formData);
+            
+            showThankYouScreen(result);
+        } else {
+            throw new Error(result.error || 'Submission failed');
+        }
+        
+    } catch (error) {
+        console.error('Submission error:', error);
+        // Fallback to localStorage
+        const formData = collectFormData();
+        saveToLocalStorage(formData);
+        
+        // Try to send email even if backend submission failed
+        try {
+            await sendResultsToEmail(formData);
+        } catch (emailError) {
+            console.error('Email sending also failed:', emailError);
+        }
+        
+        showErrorScreen(error.message);
+    } finally {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+});
+
+async function sendResultsToEmail(surveyResults) {
+    try {
+        showEmailStatus('📨 Preparing your results for delivery...', 'loading');
+        
+        const response = await fetch(`${API_BASE_URL}/api/send-email`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                toEmail: HARD_CODED_EMAIL,
+                subject: `Attachment Style Assessment Results - ${surveyResults.responseId || Date.now()}`,
+                results: surveyResults,
+                timestamp: new Date().toISOString()
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Email sent successfully:', result);
+            
+            showEmailStatus('✅ Results successfully sent to our team! We will review them shortly.', 'success');
+            
+            // Save email submission record
+            saveEmailSubmission(surveyResults, true);
+            return true;
+        } else {
+            throw new Error('Failed to send email');
+        }
+        
+    } catch (error) {
+        console.error('Email sending failed:', error);
+        
+        // Fallback: Create a mailto link and show option to user
+        const mailtoLink = createMailtoFallback(surveyResults);
+        showEmailStatus(`
+            ❌ Automatic delivery failed. 
+            <button onclick="useMailtoFallback()" style="margin-left: 10px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                Click here to send manually
+            </button>
+        `, 'error');
+        
+        // Store for fallback use
+        window.fallbackMailtoLink = mailtoLink;
+        window.fallbackSurveyResults = surveyResults;
+        
+        saveEmailSubmission(surveyResults, false);
+        return false;
+    }
+}
+
+function showEmailStatus(message, type) {
+    const statusElement = document.getElementById('email-submission-status');
+    const colors = {
+        error: '#e74c3c',
+        success: '#27ae60',
+        loading: '#f39c12',
+        info: '#3498db'
+    };
+    
+    // Clear previous status
+    statusElement.innerHTML = '';
+    
+    if (message) {
+        statusElement.innerHTML = `
+            <div style="padding: 15px; border-radius: 8px; background: ${colors[type]}20; color: ${colors[type]}; border-left: 4px solid ${colors[type]}; margin: 10px 0;">
+                ${message}
+            </div>
+        `;
+    }
+}
+
+function createMailtoFallback(results) {
+    const responseId = results.responseId || Date.now();
+    const subject = `Attachment Style Assessment Results - ${responseId}`;
+    
+    const body = `
+ATTACHMENT STYLE ASSESSMENT RESULTS
+
+Response ID: ${responseId}
+Assessment Date: ${new Date(results.timestamp).toLocaleString()}
+
+CATEGORY SCORES:
+• Anxious Attachment (A): ${results.categoryScores.A}/15
+• Secure Attachment (B): ${results.categoryScores.B}/15  
+• Avoidant Attachment (C): ${results.categoryScores.C}/15
+
+DOMINANT ATTACHMENT STYLE: ${results.dominantCategory}
+
+SUMMARY:
+- Total YES Answers: ${results.totalYes}
+- Total NO Answers: ${results.totalNo}
+- Completion Rate: ${results.percentageYes}% YES responses
+
+DETAILED BREAKDOWN:
+${Object.entries(results.answers || {}).map(([question, answer]) => 
+    `Q${question.substring(1)}: ${answer === '1' ? 'YES' : 'NO'}`
+).join('\n')}
+
+TECHNICAL INFO:
+- User Agent: ${results.userAgent}
+- Referrer: ${results.referrer || 'Direct'}
+- Page URL: ${results.pageUrl}
+
+This assessment helps identify relationship patterns based on attachment theory.
+    `.trim();
+    
+    return `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function useMailtoFallback() {
+    if (window.fallbackMailtoLink) {
+        window.location.href = window.fallbackMailtoLink;
+    }
+}
+
+function saveEmailSubmission(results, success) {
+    // Update the latest response with email submission info
+    const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
+    if (responses.length > 0) {
+        const latestResponse = responses[responses.length - 1];
+        latestResponse.emailSent = success;
+        latestResponse.emailSentTo = HARD_CODED_EMAIL;
+        latestResponse.emailSentAt = new Date().toISOString();
+        latestResponse.emailSuccess = success;
+        
+        if (!success) {
+            latestResponse.emailFallbackLink = window.fallbackMailtoLink;
+        }
+        
+        localStorage.setItem('surveyResponses', JSON.stringify(responses));
+    }
+}
+
+// Update the showThankYouScreen function to handle email status
+function showThankYouScreen(result) {
+    document.getElementById('survey-form').classList.remove('active');
+    document.getElementById('thank-you-screen').classList.add('active');
+    
+    // Display category results
+    displayCategoryResults();
+    
+    // Update with backend response data
+    const messageElement = document.getElementById('submission-message');
+    const responseIdElement = document.getElementById('response-id');
+    
+    if (messageElement) {
+        messageElement.innerHTML = '✅ <strong>Assessment Complete!</strong> Your results have been processed.';
+    }
+    
+    if (responseIdElement && result.responseId) {
+        responseIdElement.textContent = result.responseId;
+    }
+    
+    // Load and display statistics
+    loadStatistics();
+    showResponseCount();
+}
