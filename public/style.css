@@ -43,6 +43,7 @@ h2 {
     color: #555;
     margin-bottom: 20px;
     font-size: 1.3em;
+    line-height: 1.4;
 }
 
 .question {
@@ -75,24 +76,9 @@ label:hover {
     background-color: #f8f9ff;
 }
 
-input[type="radio"], input[type="checkbox"] {
+input[type="radio"] {
     width: 18px;
     height: 18px;
-}
-
-textarea {
-    width: 100%;
-    padding: 15px;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 16px;
-    resize: vertical;
-    min-height: 120px;
-}
-
-textarea:focus {
-    outline: none;
-    border-color: #667eea;
 }
 
 button {
@@ -137,6 +123,29 @@ button:disabled {
     transition: width 0.3s ease;
 }
 
+/* Thank you screen styles */
+#thank-you-screen {
+    text-align: center;
+}
+
+#thank-you-screen h1 {
+    color: #27ae60;
+    margin-bottom: 20px;
+}
+
+.response-info {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+}
+
+.response-info p {
+    margin: 10px 0;
+    font-size: 16px;
+}
+
+/* Mobile responsiveness */
 @media (max-width: 768px) {
     .survey-container {
         padding: 20px;
@@ -151,4 +160,65 @@ button:disabled {
     button {
         width: 100%;
     }
+    
+    h2 {
+        font-size: 1.1em;
+    }
+    
+    body {
+        padding: 10px;
+        align-items: flex-start;
+        min-height: 100vh;
+    }
+}
+
+@media (max-width: 480px) {
+    .survey-container {
+        padding: 15px;
+    }
+    
+    h1 {
+        font-size: 1.5em;
+    }
+    
+    h2 {
+        font-size: 1em;
+    }
+    
+    label {
+        padding: 10px;
+        font-size: 14px;
+    }
+}
+
+/* Loading animation */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Success/Error states */
+.status-success {
+    color: #27ae60;
+    background: #d5f4e6;
+    padding: 10px;
+    border-radius: 5px;
+    border-left: 4px solid #27ae60;
+}
+
+.status-error {
+    color: #e74c3c;
+    background: #fadbd8;
+    padding: 10px;
+    border-radius: 5px;
+    border-left: 4px solid #e74c3c;
 }
