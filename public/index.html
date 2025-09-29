@@ -1,22 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facebook Survey</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Attachment Style Survey</title>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .question { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        label { display: block; margin: 10px 0; }
+        button { padding: 10px 20px; font-size: 16px; }
+        #thank-you-screen { display: none; }
+    </style>
 </head>
 <body>
-    <div class="survey-container">
-        <div id="welcome-screen" class="screen active">
-            <h1>Customer Satisfaction Survey</h1>
-            <p>Thank you for participating! This survey will take about 2 minutes.</p>
-            <button onclick="startSurvey()">Start Survey</button>
-        </div>
-
-    <form id="survey-form" class="screen">
-            
-        <div class="question active" data-category="A">
+    <h1>Attachment Style Survey</h1>
+    
+    <form id="survey-form">
+<div class="question active" data-category="A">
             <h2>אני לעתים קרובות דואג שבן/בת הזוג שלי יפסיק/ה לאהוב אותי.</h2>
             <div class="options">
                 <label><input type="radio" name="q1" value="1">YES</label>
@@ -357,98 +355,16 @@
             <button type="button" onclick="nextQuestion()" id="next-btn">Next</button>
             <button type="submit" id="submit-btn" style="display: none;">Submit Survey</button>
         </div>
-        </form>
-
-    <div id="thank-you-screen" class="screen">
-    <h1>Thank You! 📊</h1>
-
-    <p id="submission-message">Your attachment style assessment has been completed!</p>
-    <p><strong>Response ID:</strong> <span id="response-id">Loading...</span></p>
+        
+    </form>
     
-    <!-- Email Results Section -->
-    <div id="email-results-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
-        <h3>📧 Receive Your Detailed Results</h3>
-        <p>Click below to send your comprehensive attachment style analysis to our team:</p>
-        
-        <button 
-            onclick="sendResultsToEmail()" 
-            id="email-results-btn"
-            style="padding: 15px 25px; background: #ea4335; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; gap: 10px;"
-        >
-            <span>📨</span>
-            Send Results to Our Team
-        </button>
-        
-        <p style="font-size: 12px; color: #666; margin: 10px 0;">
-            💡 Our relationship experts will review your results and may follow up with personalized insights.
-        </p>
-        
-        <div id="email-submission-status" style="margin-top: 15px;"></div>
-    </div>
-
-
-    <!-- Facebook Address Input -->
-    <div id="facebook-address-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
-        <h3>📬 Get Your Results on Facebook</h3>
-        <p>Enter your Facebook profile link to receive your detailed results:</p>
-        
-        <div style="display: flex; gap: 10px; margin: 15px 0;">
-            <input 
-                type="text" 
-                id="facebook-address" 
-                placeholder="https://facebook.com/yourprofile or https://fb.com/yourprofile"
-                style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;"
-            >
-            <button 
-                onclick="submitFacebookAddress()" 
-                style="padding: 12px 20px; background: #1877f2; color: white; border: none; border-radius: 8px; cursor: pointer;"
-            >
-                Send Results
-            </button>
-        </div>
-        
-        <p style="font-size: 12px; color: #666; margin: 5px 0;">
-            💡 <strong>How to find your Facebook profile link:</strong><br>
-            • Go to your Facebook profile<br>
-            • Copy the URL from your browser's address bar<br>
-            • It should look like: <code>https://facebook.com/your.name</code>
-        </p>
-        
-        <div id="facebook-submission-status" style="margin-top: 10px;"></div>
+    <div id="thank-you-screen">
+        <h2>✅ Thank You!</h2>
+        <p><strong>Response ID:</strong> <span id="response-id"></span></p>
+        <p id="save-status"></p>
+        <p id="email-status"></p>
     </div>
     
-    <!-- Added text paragraph -->
-    <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
-        חרדתי (A) – מחפש קרבה ואינטימיות גבוהה, אך חושש מדחייה ונוטה לפרש את התנהגות בן/בת הזוג באופן אישי. חווה רגשות שליליים רבים במערכת היחסים, נוטה להתעצבן ולהגיב באימפולסיביות, אך מרגיש בטוח יותר עם הרבה ביטחון והרגעה מהצד השני.
-    </p>
-        <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
-        בטוח (B) – חש בנוחות עם אינטימיות, מתקשר בפתיחות וביעילות, מגיב לרגשות בן/בת הזוג, משתף חוויות ותומך בעת הצורך. רגוע יחסית בנושאי קשר ואינו נבהל מקונפליקטים.
-    </p>
-        <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
-        נמנע (C) – מעריך מאוד עצמאות ואוטונומיה, מעדיף לשמור מרחק רגשי, מתקשה בפתיחות ובקִרבה עמוקה, לא מתמקד הרבה בדאגה לקשר או לדחייה, ולעיתים בן/בת הזוג חשים שהוא/היא מרוחק/ת רגשית.
-    </p>
-    
-    <!-- Add this container for category results -->
-    <div id="category-results"></div>
-    
-    <div id="response-stats" style="margin: 15px 0;"></div>
-    
-    <div class="share-options" style="margin: 20px 0;">
-        <button onclick="shareOnFacebook()" class="share-btn" style="background: #1877f2;">Share on Facebook</button>
-        <button onclick="shareOnTwitter()" class="share-btn" style="background: #1da1f2;">Share on Twitter</button>
-        <button onclick="copySurveyLink()" class="share-btn" style="background: #666;">Copy Survey Link</button>
-    </div>
-
-    <!-- Admin Panel -->
-    <div id="admin-panel" style="display: none; margin-top: 30px; padding: 15px; background: #f5f5f5; border-radius: 10px;">
-        <h3>📊 Admin Panel</h3>
-        <button onclick="downloadResponses()" style="background: #28a745;">Download Responses (CSV)</button>
-        <button onclick="clearResponses()" style="background: #dc3545;">Clear Local Responses</button>
-        <div id="response-count" style="margin-top: 10px; font-size: 14px;"></div>
-    </div>
-</div>
-    </div>
-
     <script src="script.js"></script>
 </body>
 </html>
