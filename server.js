@@ -2,41 +2,58 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Basic middleware first
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Serve static files
 app.use(express.static('public'));
 
 // Railway-compatible data directory
-const dataDir = process.env.NODE_ENV === 'production' 
-    ? path.join('/tmp', 'survey-data')
-    : path.join(__dirname, 'data');
+const getDataDir = () => {
+    // Use /tmp on Railway, ./data locally
+    if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_STATIC_URL) {
+        return path.join('/tmp', 'survey-data');
+    }
+    return path.join(__dirname, 'data');
+};
 
+const dataDir = getDataDir();
 const dataFile = path.join(dataDir, 'survey-responses.json');
 const emailFile = path.join(dataDir, 'email-records.json');
 
 // Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-    console.log('Created data directory:', dataDir);
-}
+const initializeDataDirectory = () => {
+    try {
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+            console.log('✅ Created data directory:', dataDir);
+        }
+        
+        // Initialize data files
+        if (!fs.existsSync(dataFile)) {
+            fs.writeFileSync(dataFile, JSON.stringify([]));
+            console.log('✅ Created survey responses file');
+        }
+        
+        if (!fs.existsSync(emailFile)) {
+            fs.writeFileSync(emailFile, JSON.stringify([]));
+            console.log('✅ Created email records file');
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to initialize data directory:', error);
+        return false;
+    }
+};
 
-// Initialize data files if they don't exist
-if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify([], null, 2));
-    console.log('Created new survey responses file');
-}
-
-if (!fs.existsSync(emailFile)) {
-    fs.writeFileSync(emailFile, JSON.stringify([], null, 2));
-    console.log('Created new email records file');
-}
-
-// Helper function to read survey data
-function readSurveyData() {
+// Helper functions with better error handling
+const readSurveyData = () => {
     try {
         if (!fs.existsSync(dataFile)) {
             return [];
@@ -47,10 +64,9 @@ function readSurveyData() {
         console.error('Error reading survey data:', error);
         return [];
     }
-}
+};
 
-// Helper function to write survey data
-function writeSurveyData(data) {
+const writeSurveyData = (data) => {
     try {
         fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
         return true;
@@ -58,10 +74,9 @@ function writeSurveyData(data) {
         console.error('Error writing survey data:', error);
         return false;
     }
-}
+};
 
-// Helper function to read email records
-function readEmailRecords() {
+const readEmailRecords = () => {
     try {
         if (!fs.existsSync(emailFile)) {
             return [];
@@ -72,10 +87,9 @@ function readEmailRecords() {
         console.error('Error reading email records:', error);
         return [];
     }
-}
+};
 
-// Helper function to write email records
-function writeEmailRecords(data) {
+const writeEmailRecords = (data) => {
     try {
         fs.writeFileSync(emailFile, JSON.stringify(data, null, 2));
         return true;
@@ -83,22 +97,31 @@ function writeEmailRecords(data) {
         console.error('Error writing email records:', error);
         return false;
     }
+};
+
+// Initialize data directory on startup
+if (!initializeDataDirectory()) {
+    console.log('⚠️  Using in-memory storage only');
 }
 
-// Routes
-
-// Health check endpoint
+// Health check endpoint - simple and first
 app.get('/api/health', (req, res) => {
-    const data = readSurveyData();
-    res.json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        dataDirectory: dataDir,
-        dataFile: dataFile,
-        responses: data.length,
-        railway: !!process.env.RAILWAY_STATIC_URL
-    });
+    try {
+        const data = readSurveyData();
+        res.json({
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development',
+            dataDirectory: dataDir,
+            responses: data.length,
+            railway: !!process.env.RAILWAY_STATIC_URL
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message
+        });
+    }
 });
 
 // Submit survey response
@@ -106,9 +129,8 @@ app.post('/api/survey', (req, res) => {
     try {
         console.log('📝 Received survey submission');
         
-        const { answers, categoryScores, totalScoreA, totalScoreB, totalScoreC, dominantCategory, totalYes, totalNo, responseId } = req.body;
+        const { answers, categoryScores, totalScoreA, totalScoreB, totalScoreC, dominantCategory, totalYes, totalNo } = req.body;
         
-        // Validation
         if (!answers || Object.keys(answers).length === 0) {
             return res.status(400).json({
                 success: false,
@@ -116,9 +138,8 @@ app.post('/api/survey', (req, res) => {
             });
         }
 
-        // Create response object
         const responseData = {
-            id: responseId || 'resp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            id: 'resp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
             timestamp: new Date().toISOString(),
             answers: answers,
             categoryScores: categoryScores || { A: 0, B: 0, C: 0 },
@@ -130,65 +151,47 @@ app.post('/api/survey', (req, res) => {
             totalNo: totalNo || 0,
             totalQuestions: Object.keys(answers).length,
             userAgent: req.body.userAgent || req.get('User-Agent'),
-            ip: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
+            ip: req.ip || req.connection.remoteAddress,
             referrer: req.body.referrer || '',
             pageUrl: req.body.pageUrl || ''
         };
 
-        console.log('✅ Processed response:', {
-            id: responseData.id,
-            answers: Object.keys(answers).length,
-            scores: responseData.categoryScores,
-            dominant: responseData.dominantCategory
-        });
+        console.log('✅ Processed response for:', responseData.dominantCategory);
 
-        // Read existing data
         const existingData = readSurveyData();
-        
-        // Add new response
         existingData.push(responseData);
         
-        // Save to file
-        const writeSuccess = writeSurveyData(existingData);
-        
-        if (!writeSuccess) {
-            throw new Error('Failed to save data to file');
+        if (!writeSurveyData(existingData)) {
+            throw new Error('Failed to save data');
         }
-
-        console.log('💾 Saved survey response to file');
 
         res.json({
             success: true,
             message: 'Survey response saved successfully',
             responseId: responseData.id,
             timestamp: responseData.timestamp,
-            totalResponses: existingData.length,
-            scores: responseData.categoryScores,
-            dominantCategory: responseData.dominantCategory
+            totalResponses: existingData.length
         });
 
     } catch (error) {
-        console.error('❌ Error saving survey response:', error);
+        console.error('❌ Error saving survey:', error);
         res.status(500).json({
             success: false,
-            error: 'Internal server error: ' + error.message
+            error: 'Internal server error'
         });
     }
 });
 
-// Get all survey responses (for admin)
+// Get all responses
 app.get('/api/responses', (req, res) => {
     try {
         const data = readSurveyData();
-        
         res.json({
             success: true,
             data: data,
-            count: data.length,
-            timestamp: new Date().toISOString()
+            count: data.length
         });
     } catch (error) {
-        console.error('Error loading responses:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to load responses'
@@ -196,292 +199,121 @@ app.get('/api/responses', (req, res) => {
     }
 });
 
-// Get survey statistics
+// Get statistics
 app.get('/api/stats', (req, res) => {
     try {
         const data = readSurveyData();
-        
         const stats = {
             totalResponses: data.length,
             averageScores: { A: 0, B: 0, C: 0 },
-            dominantCategories: { A: 0, B: 0, C: 0, Tie: 0, Unknown: 0 },
-            recentSubmissions: data.slice(-10).reverse()
+            dominantCategories: { A: 0, B: 0, C: 0, Tie: 0, Unknown: 0 }
         };
         
         if (data.length > 0) {
-            // Calculate average scores for each category
-            const totalA = data.reduce((sum, resp) => sum + (resp.totalScoreA || 0), 0);
-            const totalB = data.reduce((sum, resp) => sum + (resp.totalScoreB || 0), 0);
-            const totalC = data.reduce((sum, resp) => sum + (resp.totalScoreC || 0), 0);
+            stats.averageScores.A = (data.reduce((sum, resp) => sum + (resp.totalScoreA || 0), 0) / data.length).toFixed(2);
+            stats.averageScores.B = (data.reduce((sum, resp) => sum + (resp.totalScoreB || 0), 0) / data.length).toFixed(2);
+            stats.averageScores.C = (data.reduce((sum, resp) => sum + (resp.totalScoreC || 0), 0) / data.length).toFixed(2);
             
-            stats.averageScores.A = (totalA / data.length).toFixed(2);
-            stats.averageScores.B = (totalB / data.length).toFixed(2);
-            stats.averageScores.C = (totalC / data.length).toFixed(2);
-            
-            // Count dominant categories
             data.forEach(response => {
                 const category = response.dominantCategory || 'Unknown';
                 stats.dominantCategories[category] = (stats.dominantCategories[category] || 0) + 1;
             });
         }
         
-        res.json({
-            success: true,
-            stats: stats
-        });
+        res.json({ success: true, stats: stats });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to calculate statistics'
-        });
+        res.status(500).json({ success: false, error: 'Failed to calculate stats' });
     }
 });
 
-// Download responses as CSV
+// Download CSV
 app.get('/api/responses/csv', (req, res) => {
     try {
         const data = readSurveyData();
-        
         if (data.length === 0) {
             return res.status(404).json({ error: 'No data available' });
         }
         
-        const csv = convertToCSV(data);
+        const headers = ['ID', 'Timestamp', 'Score A', 'Score B', 'Score C', 'Dominant Category'];
+        let csv = headers.join(',') + '\n';
+        
+        data.forEach(item => {
+            const row = [
+                `"${item.id}"`,
+                `"${item.timestamp}"`,
+                item.totalScoreA || 0,
+                item.totalScoreB || 0,
+                item.totalScoreC || 0,
+                `"${item.dominantCategory}"`
+            ];
+            csv += row.join(',') + '\n';
+        });
         
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=attachment-survey-responses-${Date.now()}.csv`);
+        res.setHeader('Content-Disposition', `attachment; filename=survey-${Date.now()}.csv`);
         res.send(csv);
         
     } catch (error) {
-        console.error('Error generating CSV:', error);
         res.status(500).json({ error: 'Failed to generate CSV' });
     }
 });
 
-// Delete all responses (admin only)
-app.delete('/api/responses', (req, res) => {
-    try {
-        const { confirm } = req.body;
-        
-        if (confirm !== 'YES_DELETE_ALL') {
-            return res.status(400).json({
-                success: false,
-                error: 'Confirmation required. Send confirm: "YES_DELETE_ALL" in request body'
-            });
-        }
-        
-        const success = writeSurveyData([]);
-        
-        if (success) {
-            res.json({
-                success: true,
-                message: 'All responses deleted successfully'
-            });
-        } else {
-            throw new Error('Failed to clear data file');
-        }
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to delete responses'
-        });
-    }
-});
-
-// Send email with results
+// Email endpoint
 app.post('/api/send-email', (req, res) => {
     try {
-        const { toEmail, subject, results, timestamp } = req.body;
+        const { toEmail, subject, results } = req.body;
         
-        console.log('📧 Email sending request received');
-        console.log('To:', toEmail);
-        console.log('Subject:', subject);
-        console.log('Response ID:', results.responseId);
-        console.log('Dominant Category:', results.dominantCategory);
+        console.log('📧 Email requested for:', results.responseId);
         
-        // For Railway deployment, we simulate email sending
-        // In production, you would integrate with SendGrid, Mailgun, etc.
+        // Simulate email sending
         setTimeout(() => {
-            try {
-                // Save email record
-                const emailRecords = readEmailRecords();
-                
-                const emailRecord = {
-                    id: 'email_' + Date.now(),
-                    toEmail: toEmail,
-                    subject: subject,
-                    responseId: results.responseId,
-                    dominantCategory: results.dominantCategory,
-                    scores: results.categoryScores,
-                    totalQuestions: results.totalQuestions,
-                    sentAt: new Date().toISOString(),
-                    status: 'simulated_sent'
-                };
-                
-                emailRecords.push(emailRecord);
-                writeEmailRecords(emailRecords);
-                
-                console.log('✅ Email record saved:', emailRecord.id);
-                
-                res.json({
-                    success: true,
-                    message: 'Email sent successfully (simulated on Railway)',
-                    emailId: emailRecord.id,
-                    timestamp: emailRecord.sentAt,
-                    note: 'On Railway, integrate with real email service like SendGrid for actual email delivery'
-                });
-                
-            } catch (emailError) {
-                console.error('Error saving email record:', emailError);
-                res.json({
-                    success: true,
-                    message: 'Email simulated (record saving failed)',
-                    note: 'Check logs for details'
-                });
-            }
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Error in email endpoint:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to process email request: ' + error.message
-        });
-    }
-});
-
-// Get email sending history (admin endpoint)
-app.get('/api/emails', (req, res) => {
-    try {
-        const emailRecords = readEmailRecords();
-        
-        res.json({
-            success: true,
-            count: emailRecords.length,
-            emails: emailRecords
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to load email records'
-        });
-    }
-});
-
-// Save Facebook address
-app.post('/api/survey/facebook', (req, res) => {
-    try {
-        const { responseId, facebookAddress, categoryScores, dominantCategory } = req.body;
-        
-        // Read existing data
-        const data = readSurveyData();
-        
-        // Find the response and update it
-        const responseIndex = data.findIndex(response => response.id === responseId);
-        if (responseIndex !== -1) {
-            data[responseIndex].facebookAddress = facebookAddress;
-            data[responseIndex].facebookSubmittedAt = new Date().toISOString();
+            const emailRecords = readEmailRecords();
+            const emailRecord = {
+                id: 'email_' + Date.now(),
+                toEmail: toEmail,
+                subject: subject,
+                responseId: results.responseId,
+                sentAt: new Date().toISOString(),
+                status: 'simulated'
+            };
             
-            // Save updated data
-            writeSurveyData(data);
-            
-            console.log(`Facebook address saved for response ${responseId}: ${facebookAddress}`);
+            emailRecords.push(emailRecord);
+            writeEmailRecords(emailRecords);
             
             res.json({
                 success: true,
-                message: 'Facebook address saved successfully'
+                message: 'Email simulated successfully',
+                emailId: emailRecord.id
             });
-        } else {
-            res.status(404).json({
-                success: false,
-                error: 'Response not found'
-            });
-        }
+        }, 500);
         
     } catch (error) {
-        console.error('Error saving Facebook address:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to save Facebook address'
-        });
+        res.status(500).json({ success: false, error: 'Email failed' });
     }
 });
 
-// Serve the main page
+// Serve main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Serve other static pages
+// Catch-all for SPA routing
 app.get('*', (req, res) => {
-    const filePath = path.join(__dirname, 'public', req.path);
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({
-            success: false,
-            error: 'Endpoint not found'
-        });
-    }
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// CSV conversion helper
-function convertToCSV(objArray) {
-    if (objArray.length === 0) return 'No data available';
-    
-    const headers = ['ID', 'Timestamp', 'Score A', 'Score B', 'Score C', 'Dominant Category', 'Total Yes', 'Total No', 'Total Questions', 'IP Address'];
-    let csv = headers.join(',') + '\n';
-    
-    objArray.forEach(item => {
-        const row = [
-            `"${item.id || ''}"`,
-            `"${item.timestamp || ''}"`,
-            item.totalScoreA || 0,
-            item.totalScoreB || 0,
-            item.totalScoreC || 0,
-            `"${item.dominantCategory || 'Unknown'}"`,
-            item.totalYes || 0,
-            item.totalNo || 0,
-            item.totalQuestions || 0,
-            `"${item.ip || ''}"`
-        ];
-        csv += row.join(',') + '\n';
-    });
-    
-    return csv;
-}
-
-// Error handling middleware
+// Error handling
 app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
-    res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-    });
-});
-
-// 404 handler for API routes
-app.use('/api/*', (req, res) => {
-    res.status(404).json({
-        success: false,
-        error: 'API endpoint not found'
-    });
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log('=== SERVER STARTED SUCCESSFULLY ===');
-    console.log(`🚀 Survey server running on port ${PORT}`);
-    console.log(`📊 Access the survey at: http://localhost:${PORT}`);
-    console.log(`🔧 API health check: http://localhost:${PORT}/api/health`);
-    console.log(`💾 Data directory: ${dataDir}`);
+    console.log('=== SERVER STARTED ===');
+    console.log(`🚀 Port: ${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🚂 Railway detected: ${process.env.RAILWAY_STATIC_URL ? 'YES' : 'NO'}`);
-    
-    // Test data file
-    const data = readSurveyData();
-    const emails = readEmailRecords();
-    console.log(`💾 Loaded ${data.length} survey responses`);
-    console.log(`📧 Loaded ${emails.length} email records`);
-    console.log('=== SERVER READY ===');
+    console.log(`💾 Data dir: ${dataDir}`);
+    console.log(`📊 Responses: ${readSurveyData().length}`);
+    console.log('✅ Server is ready');
 });
