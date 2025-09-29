@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,17 +10,6 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-
-// Email configuration - UPDATE THESE!
-const EMAIL_CONFIG = {
-    service: 'gmail',
-    auth: {
-        user: 'yoavshapira@gmail.com', // CHANGE THIS
-        pass: 'Z+!9]q$vud+X-p~N'     // CHANGE THIS
-    }
-};
-
-const RECIPIENT_EMAIL = 'yoavshapira4321@gmail.com'; // Where to send results
 
 // Data file
 const dataFile = path.join(__dirname, 'survey-responses.json');
@@ -52,46 +40,6 @@ function saveSurveyData(data) {
     }
 }
 
-// Send email function
-async function sendSurveyEmail(surveyData) {
-    try {
-        const transporter = nodemailer.createTransporter(EMAIL_CONFIG);
-        
-        const emailText = `
-ATTACHMENT STYLE SURVEY RESULTS
-
-Response ID: ${surveyData.responseId}
-Completed: ${new Date(surveyData.timestamp).toLocaleString()}
-
-SCORES:
-- Anxious (A): ${surveyData.categoryScores.A}
-- Secure (B): ${surveyData.categoryScores.B}  
-- Avoidant (C): ${surveyData.categoryScores.C}
-
-Dominant Style: ${surveyData.dominantCategory}
-
-Summary:
-- Total Questions: ${surveyData.totalQuestions}
-- Yes Answers: ${surveyData.totalYes}
-- No Answers: ${surveyData.totalNo}
-        `.trim();
-
-        const mailOptions = {
-            from: EMAIL_CONFIG.auth.user,
-            to: RECIPIENT_EMAIL,
-            subject: `Survey Results - ${surveyData.responseId}`,
-            text: emailText
-        };
-
-        const result = await transporter.sendMail(mailOptions);
-        console.log('✅ Email sent:', result.messageId);
-        return true;
-    } catch (error) {
-        console.error('❌ Email failed:', error);
-        return false;
-    }
-}
-
 // Routes
 app.post('/api/survey', async (req, res) => {
     try {
@@ -103,7 +51,7 @@ app.post('/api/survey', async (req, res) => {
             ...req.body
         };
 
-        // 1. Save to JSON file
+        // Save to JSON file
         const allData = readSurveyData();
         allData.push(surveyData);
         const saved = saveSurveyData(allData);
@@ -114,14 +62,11 @@ app.post('/api/survey', async (req, res) => {
 
         console.log('💾 Saved to file:', surveyData.responseId);
 
-        // 2. Send email
-        const emailSent = await sendSurveyEmail(surveyData);
-        
         res.json({
             success: true,
             responseId: surveyData.responseId,
             savedToFile: saved,
-            emailSent: emailSent,
+            emailSent: false, // Temporarily disabled
             totalResponses: allData.length
         });
 
