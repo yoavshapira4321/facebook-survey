@@ -12,17 +12,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Email configuration - CHANGE THESE!
+// Email configuration - UPDATE THESE!
 const EMAIL_CONFIG = {
     service: 'gmail',
     auth: {
         user: 'yoavshapira@gmail.com', // CHANGE THIS
-        pass: 'Z+!9]q$vud+X-p~N'     // CHANGE THIS (Gmail app password)
+        pass: 'Z+!9]q$vud+X-p~N'     // CHANGE THIS
     }
 };
 
-// Where to send results
-const RECIPIENT_EMAIL = 'yoavshapira@gmail.com'; // CHANGE THIS
+const RECIPIENT_EMAIL = 'yoavshapira4321@gmail.com'; // Where to send results
 
 // Data file
 const dataFile = path.join(__dirname, 'survey-responses.json');
@@ -75,10 +74,6 @@ Summary:
 - Total Questions: ${surveyData.totalQuestions}
 - Yes Answers: ${surveyData.totalYes}
 - No Answers: ${surveyData.totalNo}
-
-User Info:
-- Page: ${surveyData.pageUrl}
-- Referrer: ${surveyData.referrer || 'Direct'}
         `.trim();
 
         const mailOptions = {
@@ -139,7 +134,7 @@ app.post('/api/survey', async (req, res) => {
     }
 });
 
-// Get all responses (for checking)
+// Get all responses
 app.get('/api/responses', (req, res) => {
     try {
         const data = readSurveyData();
@@ -163,9 +158,5 @@ app.get('/api/health', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log('🚀 Survey server started');
-    console.log(`📍 Port: ${PORT}`);
-    console.log(`📧 Emails to: ${RECIPIENT_EMAIL}`);
-    console.log(`💾 Data file: ${dataFile}`);
-    console.log(`✅ Ready! Visit: http://localhost:${PORT}`);
+    console.log('🚀 Survey server started on port', PORT);
 });
