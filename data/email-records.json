@@ -12,5 +12,20 @@
     "totalQuestions": 42,
     "sentAt": "2025-09-27T22:49:49.018Z",
     "status": "sent"
+  },
+  {
+    "id": "email_1759014415028",
+    "toEmail": "yoavshapira4321@gmail.com",
+    "subject": "Attachment Style Assessment Results - resp_1759014414010_9iuo9rrbw",
+    "responseId": "resp_1759014414010_9iuo9rrbw",
+    "dominantCategory": "B",
+    "scores": {
+      "A": 0,
+      "B": 0,
+      "C": 0
+    },
+    "totalQuestions": 42,
+    "sentAt": "2025-09-27T23:06:55.028Z",
+    "status": "sent"
   }
 ]
