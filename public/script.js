@@ -298,58 +298,120 @@ function saveToLocalStorage(data) {
 
 async function sendResultsToEmail(surveyResults, responseId) {
     try {
-        showEmailStatus('📨 Preparing your results for delivery...', 'loading');
+        showEmailStatus('📨 Sending your results via email...', 'loading');
         
         // Ensure we have valid data
         const emailResponseId = responseId || surveyResults?.responseId || Date.now();
         const safeResults = surveyResults || {};
         
-        const response = await fetch(`${API_BASE_URL}/api/send-email`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                toEmail: HARD_CODED_EMAIL,
-                subject: `Attachment Style Assessment Results - ${emailResponseId}`,
-                results: { 
-                    ...safeResults, 
-                    responseId: emailResponseId 
-                },
-                timestamp: new Date().toISOString()
-            })
-        });
+        // Prepare email content
+        const subject = `Attachment Style Assessment Results - ${emailResponseId}`;
+        const emailBody = createEmailBody(safeResults, emailResponseId);
         
-        if (response.ok) {
-            const result = await response.json();
-            console.log('Email sent successfully:', result);
-            
-            showEmailStatus('✅ Results successfully sent to our team! We will review them shortly.', 'success');
-            
+        // Create mailto link that will open user's email client
+        const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+        
+        // Try to open email client automatically
+        const emailWindow = window.open(mailtoLink, '_blank');
+        
+        // Check if email client opened successfully
+        if (emailWindow) {
+            console.log('✅ Email client opened successfully');
+            showEmailStatus('✅ Email client opened! Please review and send the email to complete the process.', 'success');
             saveEmailSubmission(safeResults, true);
             return true;
         } else {
-            throw new Error('Failed to send email');
+            // Fallback: show manual option
+            throw new Error('Could not open email client automatically');
         }
         
     } catch (error) {
-        console.error('Email sending failed:', error);
+        console.error('Automatic email failed:', error);
         
-        // Use safe data for fallback
-        const mailtoLink = createMailtoFallback(surveyResults);
+        // Fallback: show manual email option
+        const subject = `Attachment Style Assessment Results - ${responseId || Date.now()}`;
+        const emailBody = createEmailBody(surveyResults, responseId);
+        const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+        
         showEmailStatus(`
-            ❌ Automatic delivery failed. 
-            <button onclick="useMailtoFallback()" style="margin-left: 10px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                Click here to send manually
+            ❌ Could not open email automatically. 
+            <br><br>
+            <strong>Please click below to send your results manually:</strong>
+            <br>
+            <button onclick="sendManualEmail()" style="margin: 10px 0; padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
+                📧 Open Email to Send Results
             </button>
         `, 'error');
         
-        window.fallbackMailtoLink = mailtoLink;
-        window.fallbackSurveyResults = surveyResults;
+        // Store for manual sending
+        window.manualEmailLink = mailtoLink;
+        window.manualSurveyResults = surveyResults;
         
         saveEmailSubmission(surveyResults, false);
         return false;
     }
+}
+
+// Helper function to create email body
+function createEmailBody(results, responseId) {
+    const safeResults = results || {};
+    const categoryScores = safeResults.categoryScores || { A: 0, B: 0, C: 0 };
+    const dominantCategory = safeResults.dominantCategory || 'Unknown';
+    const totalYes = safeResults.totalYes || 0;
+    const totalNo = safeResults.totalNo || 0;
+    const totalQuestions = safeResults.totalQuestions || 0;
+    
+    return `
+ATTACHMENT STYLE ASSESSMENT RESULTS
+
+Response ID: ${responseId}
+Assessment Date: ${new Date().toLocaleString()}
+
+CATEGORY SCORES:
+• Anxious Attachment (A): ${categoryScores.A}
+• Secure Attachment (B): ${categoryScores.B}  
+• Avoidant Attachment (C): ${categoryScores.C}
+
+DOMINANT ATTACHMENT STYLE: ${dominantCategory}
+
+SUMMARY:
+- Total Questions: ${totalQuestions}
+- Yes Answers: ${totalYes}
+- No Answers: ${totalNo}
+- Completion Rate: ${Math.round((totalYes / totalQuestions) * 100)}%
+
+DETAILED ANSWERS:
+${Object.entries(safeResults.answers || {}).map(([q, answer]) => 
+    `Q${q.substring(1)}: ${answer === '1' ? 'YES' : 'NO'}`
+).join('\n')}
+
+USER INFORMATION:
+- Browser: ${navigator.userAgent.split(') ')[0].split(' (')[1] || 'Unknown'}
+- Page: ${window.location.href}
+- Referrer: ${document.referrer || 'Direct access'}
+
+--
+This assessment helps identify relationship patterns based on attachment theory.
+The results are automatically generated and should be interpreted by a qualified professional.
+    `.trim();
+}
+
+// Manual email sending function
+function sendManualEmail() {
+    if (window.manualEmailLink) {
+        window.location.href = window.manualEmailLink;
+    } else {
+        // Create new mailto link if needed
+        const subject = `Attachment Style Assessment Results - ${Date.now()}`;
+        const emailBody = createEmailBody(window.manualSurveyResults, Date.now());
+        const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+        window.location.href = mailtoLink;
+    }
+}
+
+// Also update the useMailtoFallback function to use the new system
+function useMailtoFallback() {
+    sendManualEmail();
 }
 
 function showEmailStatus(message, type) {
