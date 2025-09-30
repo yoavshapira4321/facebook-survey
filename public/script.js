@@ -300,7 +300,9 @@ async function sendResultsToEmail(surveyResults, responseId) {
     try {
         showEmailStatus('📨 Preparing your results for delivery...', 'loading');
         
-        const emailResponseId = responseId || surveyResults.responseId || Date.now();
+        // Ensure we have valid data
+        const emailResponseId = responseId || surveyResults?.responseId || Date.now();
+        const safeResults = surveyResults || {};
         
         const response = await fetch(`${API_BASE_URL}/api/send-email`, {
             method: 'POST',
@@ -310,7 +312,10 @@ async function sendResultsToEmail(surveyResults, responseId) {
             body: JSON.stringify({
                 toEmail: HARD_CODED_EMAIL,
                 subject: `Attachment Style Assessment Results - ${emailResponseId}`,
-                results: { ...surveyResults, responseId: emailResponseId },
+                results: { 
+                    ...safeResults, 
+                    responseId: emailResponseId 
+                },
                 timestamp: new Date().toISOString()
             })
         });
@@ -321,7 +326,7 @@ async function sendResultsToEmail(surveyResults, responseId) {
             
             showEmailStatus('✅ Results successfully sent to our team! We will review them shortly.', 'success');
             
-            saveEmailSubmission(surveyResults, true);
+            saveEmailSubmission(safeResults, true);
             return true;
         } else {
             throw new Error('Failed to send email');
@@ -330,6 +335,7 @@ async function sendResultsToEmail(surveyResults, responseId) {
     } catch (error) {
         console.error('Email sending failed:', error);
         
+        // Use safe data for fallback
         const mailtoLink = createMailtoFallback(surveyResults);
         showEmailStatus(`
             ❌ Automatic delivery failed. 
@@ -367,31 +373,42 @@ function showEmailStatus(message, type) {
 }
 
 function createMailtoFallback(results) {
-    const responseId = results.responseId || Date.now();
+    // Safe property access with fallbacks
+    const responseId = results?.responseId || Date.now();
+    const categoryScores = results?.categoryScores || { A: 0, B: 0, C: 0 };
+    const dominantCategory = results?.dominantCategory || 'Unknown';
+    const totalYes = results?.totalYes || 0;
+    const totalNo = results?.totalNo || 0;
+    const percentageYes = results?.percentageYes || 0;
+    const timestamp = results?.timestamp || new Date().toISOString();
+    const userAgent = results?.userAgent || 'Unknown';
+    const referrer = results?.referrer || 'Direct';
+    const pageUrl = results?.pageUrl || 'Unknown';
+    
     const subject = `Attachment Style Assessment Results - ${responseId}`;
     
     const body = `
 ATTACHMENT STYLE ASSESSMENT RESULTS
 
 Response ID: ${responseId}
-Assessment Date: ${new Date(results.timestamp).toLocaleString()}
+Assessment Date: ${new Date(timestamp).toLocaleString()}
 
 CATEGORY SCORES:
-• Anxious Attachment (A): ${results.categoryScores.A}/15
-• Secure Attachment (B): ${results.categoryScores.B}/15  
-• Avoidant Attachment (C): ${results.categoryScores.C}/15
+• Anxious Attachment (A): ${categoryScores.A}/15
+• Secure Attachment (B): ${categoryScores.B}/15  
+• Avoidant Attachment (C): ${categoryScores.C}/15
 
-DOMINANT ATTACHMENT STYLE: ${results.dominantCategory}
+DOMINANT ATTACHMENT STYLE: ${dominantCategory}
 
 SUMMARY:
-- Total YES Answers: ${results.totalYes}
-- Total NO Answers: ${results.totalNo}
-- Completion Rate: ${results.percentageYes}% YES responses
+- Total YES Answers: ${totalYes}
+- Total NO Answers: ${totalNo}
+- Completion Rate: ${percentageYes}% YES responses
 
 TECHNICAL INFO:
-- User Agent: ${results.userAgent}
-- Referrer: ${results.referrer || 'Direct'}
-- Page URL: ${results.pageUrl}
+- User Agent: ${userAgent}
+- Referrer: ${referrer}
+- Page URL: ${pageUrl}
 
 This assessment helps identify relationship patterns based on attachment theory.
     `.trim();
@@ -406,19 +423,23 @@ function useMailtoFallback() {
 }
 
 function saveEmailSubmission(results, success) {
-    const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
-    if (responses.length > 0) {
-        const latestResponse = responses[responses.length - 1];
-        latestResponse.emailSent = success;
-        latestResponse.emailSentTo = HARD_CODED_EMAIL;
-        latestResponse.emailSentAt = new Date().toISOString();
-        latestResponse.emailSuccess = success;
-        
-        if (!success) {
-            latestResponse.emailFallbackLink = window.fallbackMailtoLink;
+    try {
+        const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
+        if (responses.length > 0) {
+            const latestResponse = responses[responses.length - 1];
+            latestResponse.emailSent = success;
+            latestResponse.emailSentTo = HARD_CODED_EMAIL;
+            latestResponse.emailSentAt = new Date().toISOString();
+            latestResponse.emailSuccess = success;
+            
+            if (!success && window.fallbackMailtoLink) {
+                latestResponse.emailFallbackLink = window.fallbackMailtoLink;
+            }
+            
+            localStorage.setItem('surveyResponses', JSON.stringify(responses));
         }
-        
-        localStorage.setItem('surveyResponses', JSON.stringify(responses));
+    } catch (error) {
+        console.error('Error saving email submission:', error);
     }
 }
 
