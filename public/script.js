@@ -292,7 +292,6 @@ function saveToLocalStorage(data) {
         return false;
     }
 }
-
 function sendResultsToEmail(surveyResults, responseId) {
     try {
         showEmailStatus('📨 Preparing your results for delivery...', 'loading');
@@ -305,89 +304,110 @@ function sendResultsToEmail(surveyResults, responseId) {
         const subject = `Attachment Style Assessment Results - ${emailResponseId}`;
         const emailBody = createEmailBody(safeResults, emailResponseId);
         
-        // Create mailto link
+        // Create mailto link WITH recipient email
         const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
         
-        // Show the email button (synchronous - no async/await)
+        console.log('Mailto link created:', mailtoLink);
+        
+        // Show the email button with clear instructions
         showEmailStatus(`
-            ✅ Your results are ready!
-            <br><br>
-            <strong>Click the button below to send your results via email:</strong>
-            <br>
-            <button onclick="window.location.href='${mailtoLink.replace(/'/g, "\\'")}'" 
-                    style="margin: 15px 0; padding: 15px 25px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                📧 Send Results to Our Team
-            </button>
-            <br>
-            <small style="color: #666;">
-                This will open your email app with all results pre-filled.
-            </small>
+            <div style="text-align: center;">
+                <h3 style="color: #27ae60; margin-bottom: 15px;">✅ Results Ready!</h3>
+                <p><strong>Click the button below to send your results to our team:</strong></p>
+                
+                <button onclick="openEmailClient()" 
+                        style="margin: 15px 0; padding: 15px 30px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                    📧 Send Results Now
+                </button>
+                
+                <div style="background: #e8f4fd; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    <small><strong>Recipient:</strong> ${HARD_CODED_EMAIL}</small>
+                </div>
+                
+                <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                    This will open your email app with everything pre-filled.
+                </p>
+            </div>
         `, 'success');
         
-        // Also create a direct link as backup
+        // Store the mailto link globally for the button
+        window.currentMailtoLink = mailtoLink;
+        
+        // Also show direct link as backup
         const emailLinksDiv = document.getElementById('email-links');
         if (emailLinksDiv) {
             emailLinksDiv.innerHTML = `
-                <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                    <strong>Alternative link:</strong> 
-                    <a href="${mailtoLink}" style="color: #3498db; text-decoration: underline; word-break: break-all;">
-                        Click here if the button doesn't work
-                    </a>
+                <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4 style="margin-bottom: 10px;">📧 Alternative Method</h4>
+                    <p style="margin-bottom: 10px;"><strong>If the button doesn't work:</strong></p>
+                    <ol style="text-align: left; margin: 0; padding-left: 20px;">
+                        <li>Copy this email address: <strong>${HARD_CODED_EMAIL}</strong></li>
+                        <li>Paste it in the "To" field of your email</li>
+                        <li>Copy the results below and paste in the email body</li>
+                    </ol>
+                    <div style="margin-top: 15px; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 5px;">
+                        <strong>Subject:</strong> ${subject}
+                        <br><br>
+                        <strong>Body:</strong>
+                        <pre style="white-space: pre-wrap; font-size: 12px; margin: 10px 0;">${emailBody}</pre>
+                    </div>
+                    <button onclick="copyEmailContent()" style="margin-top: 10px; padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        📋 Copy All Content
+                    </button>
                 </div>
             `;
         }
         
-        // Save submission record (synchronous)
         saveEmailSubmission(safeResults, true);
         return true;
         
     } catch (error) {
         console.error('Email preparation failed:', error);
-        
-        // Fallback with simple direct approach
-        const subject = `Attachment Style Assessment Results - ${responseId || Date.now()}`;
-        const emailBody = createEmailBody(surveyResults, responseId);
-        const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
-        
-        showEmailStatus(`
-            <strong>Click to send your results:</strong>
-            <br>
-            <a href="${mailtoLink}" 
-               style="display: inline-block; margin: 15px 0; padding: 15px 25px; background: #3498db; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">
-                📧 Send Results via Email
-            </a>
-        `, 'info');
-        
-        saveEmailSubmission(surveyResults, false);
+        showManualEmailOption(surveyResults, responseId);
         return false;
     }
 }
 
+
+
+// Manual email fallback
+function showManualEmailOption(surveyResults, responseId) {
+    const subject = `Attachment Style Assessment Results - ${responseId || Date.now()}`;
+    const emailBody = createEmailBody(surveyResults, responseId);
+    
+    showEmailStatus(`
+        <div style="text-align: center;">
+            <h3 style="color: #e74c3c; margin-bottom: 15px;">📧 Manual Email Required</h3>
+            <p><strong>Please send your results manually:</strong></p>
+            
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+                <p><strong>Step 1:</strong> Open your email app</p>
+                <p><strong>Step 2:</strong> Send to: <strong>${HARD_CODED_EMAIL}</strong></p>
+                <p><strong>Step 3:</strong> Use subject: <strong>${subject}</strong></p>
+                <p><strong>Step 4:</strong> Copy and paste the results below:</p>
+            </div>
+            
+            <div style="background: white; padding: 15px; border: 2px solid #3498db; border-radius: 8px; margin: 15px 0;">
+                <pre style="white-space: pre-wrap; font-family: Arial; text-align: left;">${emailBody}</pre>
+            </div>
+            
+            <button onclick="copyEmailContent()" style="padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                📋 Copy Results to Clipboard
+            </button>
+        </div>
+    `, 'info');
+    
+    window.manualSurveyResults = surveyResults;
+}
+
+
 // Safe function to open email client
-function openEmailClient(mailtoLink) {
-    try {
-        // Track that user clicked the button
-        console.log('User clicked email send button');
-        
-        // Open email client
-        window.location.href = mailtoLink;
-        
-        // Update status to show email was opened
-        setTimeout(() => {
-            const statusElement = document.getElementById('email-submission-status');
-            if (statusElement) {
-                statusElement.innerHTML += `
-                    <div style="margin-top: 10px; padding: 10px; background: #d4edda; color: #155724; border-radius: 5px;">
-                        ✅ Email client opened! Please click "Send" to complete the process.
-                    </div>
-                `;
-            }
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Failed to open email client:', error);
-        // Fallback - try direct navigation
-        window.location.href = mailtoLink;
+function openEmailClient() {
+    if (window.currentMailtoLink) {
+        console.log('Opening email client with link:', window.currentMailtoLink);
+        window.location.href = window.currentMailtoLink;
+    } else {
+        showManualEmailOption();
     }
 }
 
@@ -404,23 +424,42 @@ function createEmailBody(results, responseId) {
     const dominantCategory = safeResults.dominantCategory || 'Unknown';
     const totalYes = safeResults.totalYes || 0;
     const totalNo = safeResults.totalNo || 0;
+    const totalQuestions = safeResults.totalQuestions || 0;
     
-    // Very short email body to avoid any issues
-    return `Attachment Style Assessment Results
+    return `ATTACHMENT STYLE ASSESSMENT RESULTS
 
-Response ID: ${responseId}
-Completed: ${new Date().toLocaleString()}
+RESPONSE ID: ${responseId}
+DATE: ${new Date().toLocaleString()}
 
-Scores:
-- Anxious (A): ${categoryScores.A}
-- Secure (B): ${categoryScores.B}  
-- Avoidant (C): ${categoryScores.C}
+YOUR SCORES:
+• Anxious (A): ${categoryScores.A}
+• Secure (B): ${categoryScores.B}  
+• Avoidant (C): ${categoryScores.C}
 
-Dominant Style: ${dominantCategory}
+DOMINANT ATTACHMENT STYLE: ${dominantCategory}
 
-Summary: ${totalYes} Yes, ${totalNo} No answers
+SUMMARY:
+- Total Questions: ${totalQuestions}
+- Yes Answers: ${totalYes}
+- No Answers: ${totalNo}
+- Completion Rate: ${Math.round((totalYes / totalQuestions) * 100)}%
 
-Thank you for your participation!`.trim();
+This assessment was completed via the online Attachment Style Assessment tool.
+
+--
+Please do not reply to this automated message.`;
+}
+
+function copyEmailContent() {
+    const subject = `Attachment Style Assessment Results - ${Date.now()}`;
+    const emailBody = createEmailBody(window.manualSurveyResults, Date.now());
+    const fullContent = `To: ${HARD_CODED_EMAIL}\nSubject: ${subject}\n\n${emailBody}`;
+    
+    navigator.clipboard.writeText(fullContent).then(() => {
+        alert('✅ Email content copied to clipboard! Now paste it into your email.');
+    }).catch(() => {
+        alert('❌ Could not copy to clipboard. Please copy manually.');
+    });
 }
 
 // Helper function to create email body
