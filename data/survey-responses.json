@@ -298,5 +298,30 @@
     "ip": "127.0.0.1",
     "referrer": "",
     "pageUrl": "http://localhost:3000/"
+  },
+  {
+    "id": "resp_1759238339047_eo1utei7d",
+    "timestamp": "2025-09-30T13:18:59.047Z",
+    "answers": {
+      "q1": "1",
+      "q2": "1",
+      "q3": "1"
+    },
+    "categoryScores": {
+      "A": 0,
+      "B": 0,
+      "C": 0
+    },
+    "totalScoreA": 0,
+    "totalScoreB": 0,
+    "totalScoreC": 0,
+    "dominantCategory": "A",
+    "totalYes": 3,
+    "totalNo": 0,
+    "totalQuestions": 3,
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    "ip": "127.0.0.1",
+    "referrer": "",
+    "pageUrl": "http://localhost:3000/"
   }
 ]

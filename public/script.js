@@ -17,6 +17,9 @@ const API_BASE_URL = window.location.origin;
 // Hard-coded email address
 const HARD_CODED_EMAIL = "yoavshapira4321@gmail.com";
 
+// Track current survey data globally
+let currentSurveyData = null;
+
 function startSurvey() {
     document.getElementById('welcome-screen').classList.remove('active');
     document.getElementById('survey-form').classList.add('active');
@@ -70,22 +73,21 @@ function updateProgress() {
 
 // Add Enter key listener
 function addEnterKeyListener() {
-    document.addEventListener('keydown', function(e) {
-        // Only handle Enter key (key code 13)
-        if (e.key === 'Enter' || e.keyCode === 13) {
-            // Prevent default form submission behavior
-            e.preventDefault();
-            
-            // Check if we're on the last question
-            if (currentQuestion === totalQuestions - 1) {
-                // On last question, submit the form
-                document.getElementById('survey-form').dispatchEvent(new Event('submit'));
-            } else {
-                // On other questions, go to next question
-                nextQuestion();
-            }
+    document.addEventListener('keydown', enterKeyHandler);
+}
+
+// Separate function for Enter key handling for proper removal
+function enterKeyHandler(e) {
+    if (e.key === 'Enter' || e.keyCode === 13) {
+        e.preventDefault();
+        
+        // Check if we're on the last question
+        if (currentQuestion === totalQuestions - 1) {
+            document.getElementById('survey-form').dispatchEvent(new Event('submit'));
+        } else {
+            nextQuestion();
         }
-    });
+    }
 }
 
 // Auto-focus on the first radio button of the current question
@@ -126,7 +128,6 @@ function updateCategoryCounters(questionName, answerValue) {
 }
 
 // Enhanced form submission with automatic email sending
-
 document.getElementById('survey-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -140,18 +141,57 @@ document.getElementById('survey-form').addEventListener('submit', async function
     submitBtn.disabled = true;
     
     // Show email sending status
-    showEmailStatus('📨 Preparing your results...', 'loading');
+    showEmailStatus('📨 Processing your results and sending email...', 'loading');
     
     try {
         const formData = collectFormData();
+        currentSurveyData = formData; // Store globally for retry purposes
         console.log('Submitting survey data with categories:', formData);
         
-        // Submit to backend
+        // Submit to backend (this now automatically sends email)
         const result = await submitToBackend(formData);
         
         if (result.success) {
-            // ✅ SYNC VERSION: Automatically prepare email with results
-            sendResultsToEmail(formData, result.responseId);
+            // Show success message with email status
+            if (result.emailSent) {
+                showEmailStatus(`
+                    <div style="text-align: center;">
+                        <h3 style="color: #27ae60; margin-bottom: 15px;">✅ Results Sent Successfully!</h3>
+                        <p><strong>Your results have been automatically delivered to:</strong></p>
+                        <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                            <strong>${HARD_CODED_EMAIL}</strong>
+                        </div>
+                        <p style="font-size: 14px; color: #666;">
+                            Email Message ID: ${result.emailMessageId || 'N/A'}<br>
+                            Check your inbox for confirmation.
+                        </p>
+                        <button onclick="checkEmailStatus('${result.responseId}')" 
+                                style="margin: 10px; padding: 10px 15px; background: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            📧 Check Email Status
+                        </button>
+                    </div>
+                `, 'success');
+            } else {
+                // Email failed but survey was saved
+                showEmailStatus(`
+                    <div style="text-align: center;">
+                        <h3 style="color: #e74c3c; margin-bottom: 15px;">⚠️ Survey Saved But Email Failed</h3>
+                        <p>Your results were saved but we couldn't send the email automatically.</p>
+                        <p><strong>Error:</strong> ${result.emailError || 'Unknown error'}</p>
+                        <div style="margin: 15px 0;">
+                            <button onclick="resendEmail('${result.responseId}')" 
+                                    style="margin: 5px; padding: 10px 15px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                🔄 Retry Email
+                            </button>
+                            <button onclick="showManualEmailOption(currentSurveyData, '${result.responseId}')" 
+                                    style="margin: 5px; padding: 10px 15px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                📧 Manual Email
+                            </button>
+                        </div>
+                    </div>
+                `, 'error');
+            }
+            
             showThankYouScreen(result);
         } else {
             throw new Error(result.error || 'Submission failed');
@@ -161,37 +201,17 @@ document.getElementById('survey-form').addEventListener('submit', async function
         console.error('Submission error:', error);
         // Fallback to localStorage
         const formData = collectFormData();
+        currentSurveyData = formData;
         saveToLocalStorage(formData);
         
-        // ✅ SYNC VERSION: Try to send email even if backend submission failed
-        sendResultsToEmail(formData, 'local_' + Date.now());
-        
+        // Show manual email option
+        showManualEmailOption(formData, 'local_' + Date.now());
         showErrorScreen(error.message);
     } finally {
         submitBtn.textContent = originalText;
         submitBtn.disabled = false;
     }
 });
-
-
-// Separate function for Enter key handling for proper removal
-function enterKeyHandler(e) {
-    if (e.key === 'Enter' || e.keyCode === 13) {
-        e.preventDefault();
-        
-        // Check if we're on the last question
-        if (currentQuestion === totalQuestions - 1) {
-            document.getElementById('survey-form').dispatchEvent(new Event('submit'));
-        } else {
-            nextQuestion();
-        }
-    }
-}
-
-// Update the addEnterKeyListener function to use the named function
-function addEnterKeyListener() {
-    document.addEventListener('keydown', enterKeyHandler);
-}
 
 function collectFormData() {
     const formData = new FormData(document.getElementById('survey-form'));
@@ -220,7 +240,7 @@ function collectFormData() {
         
         // Count YES/NO answers
         if (value === "1") totalYesAnswers++;
-        if (value === "2") totalNoAnswers++;
+        if (value === "0") totalNoAnswers++;
         
         // Update category counters for each answer (only once)
         updateCategoryCounters(key, value);
@@ -250,7 +270,7 @@ function getDominantCategory() {
     const maxScore = Math.max(...scores.map(([_, score]) => score));
     const dominantCategories = scores.filter(([_, score]) => score === maxScore).map(([cat]) => cat);
     
-    return dominantCategories.length === 1 ? dominantCategories[0] : 'Tie';
+    return dominantCategories.length === 1 ? dominantCategories[0] : 'Mixed';
 }
 
 async function submitToBackend(data) {
@@ -292,132 +312,177 @@ function saveToLocalStorage(data) {
         return false;
     }
 }
-function sendResultsToEmail(surveyResults, responseId) {
+
+// Enhanced email status checking
+async function checkEmailStatus(responseId) {
     try {
-        showEmailStatus('📨 Preparing your results for delivery...', 'loading');
+        showEmailStatus('🔄 Checking email delivery status...', 'loading');
         
-        // Ensure we have valid data
-        const emailResponseId = responseId || surveyResults?.responseId || Date.now();
-        const safeResults = surveyResults || {};
+        const response = await fetch(`/api/email-status/${responseId}`);
+        const result = await response.json();
         
-        // Prepare email content
-        const subject = `Attachment Style Assessment Results - ${emailResponseId}`;
-        const emailBody = createEmailBody(safeResults, emailResponseId);
-        
-        // Create mailto link WITH recipient email
-        const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
-        
-        console.log('Mailto link created:', mailtoLink);
-        
-        // Show the email button with clear instructions
-        showEmailStatus(`
-            <div style="text-align: center;">
-                <h3 style="color: #27ae60; margin-bottom: 15px;">✅ Results Ready!</h3>
-                <p><strong>Click the button below to send your results to our team:</strong></p>
-                
-                <button onclick="openEmailClient()" 
-                        style="margin: 15px 0; padding: 15px 30px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                    📧 Send Results Now
-                </button>
-                
-                <div style="background: #e8f4fd; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                    <small><strong>Recipient:</strong> ${HARD_CODED_EMAIL}</small>
-                </div>
-                
-                <p style="font-size: 14px; color: #666; margin-top: 10px;">
-                    This will open your email app with everything pre-filled.
-                </p>
-            </div>
-        `, 'success');
-        
-        // Store the mailto link globally for the button
-        window.currentMailtoLink = mailtoLink;
-        
-        // Also show direct link as backup
-        const emailLinksDiv = document.getElementById('email-links');
-        if (emailLinksDiv) {
-            emailLinksDiv.innerHTML = `
-                <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <h4 style="margin-bottom: 10px;">📧 Alternative Method</h4>
-                    <p style="margin-bottom: 10px;"><strong>If the button doesn't work:</strong></p>
-                    <ol style="text-align: left; margin: 0; padding-left: 20px;">
-                        <li>Copy this email address: <strong>${HARD_CODED_EMAIL}</strong></li>
-                        <li>Paste it in the "To" field of your email</li>
-                        <li>Copy the results below and paste in the email body</li>
-                    </ol>
-                    <div style="margin-top: 15px; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 5px;">
-                        <strong>Subject:</strong> ${subject}
-                        <br><br>
-                        <strong>Body:</strong>
-                        <pre style="white-space: pre-wrap; font-size: 12px; margin: 10px 0;">${emailBody}</pre>
+        if (result.success) {
+            const status = result.emailStatus;
+            if (status.success) {
+                showEmailStatus(`
+                    <div style="text-align: center;">
+                        <h4 style="color: #27ae60;">✅ Email Delivered Successfully!</h4>
+                        <p><strong>Message ID:</strong> ${status.messageId}</p>
+                        <p><strong>Sent:</strong> ${new Date(status.timestamp).toLocaleString()}</p>
+                        <p><strong>To:</strong> ${status.recipient}</p>
+                        <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                            <strong>Status: Delivered ✓</strong>
+                        </div>
                     </div>
-                    <button onclick="copyEmailContent()" style="margin-top: 10px; padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                        📋 Copy All Content
-                    </button>
-                </div>
-            `;
+                `, 'success');
+            } else {
+                showEmailStatus(`
+                    <div style="text-align: center;">
+                        <h4 style="color: #e74c3c;">❌ Email Failed to Send</h4>
+                        <p><strong>Error:</strong> ${status.error}</p>
+                        <p><strong>Time:</strong> ${new Date(status.timestamp).toLocaleString()}</p>
+                        <div style="margin: 15px 0;">
+                            <button onclick="resendEmail('${responseId}')" 
+                                    style="margin: 5px; padding: 10px 15px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                🔄 Retry Email
+                            </button>
+                            <button onclick="showManualEmailOption(currentSurveyData, '${responseId}')" 
+                                    style="margin: 5px; padding: 10px 15px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                📧 Use Manual Method
+                            </button>
+                        </div>
+                    </div>
+                `, 'error');
+            }
+        } else {
+            showEmailStatus('❌ Could not retrieve email status', 'error');
         }
-        
-        saveEmailSubmission(safeResults, true);
-        return true;
-        
     } catch (error) {
-        console.error('Email preparation failed:', error);
-        showManualEmailOption(surveyResults, responseId);
-        return false;
+        showEmailStatus('❌ Error checking email status: ' + error.message, 'error');
     }
 }
 
+// Resend email function
+async function resendEmail(responseId) {
+    try {
+        showEmailStatus('🔄 Resending email...', 'loading');
+        
+        const response = await fetch('/api/resend-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ responseId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success && result.emailResent) {
+            showEmailStatus(`
+                <div style="text-align: center;">
+                    <h4 style="color: #27ae60;">✅ Email Resent Successfully!</h4>
+                    <p><strong>New Message ID:</strong> ${result.messageId}</p>
+                    <p><strong>Sent:</strong> ${new Date().toLocaleString()}</p>
+                </div>
+            `, 'success');
+        } else {
+            throw new Error(result.error || 'Resend failed');
+        }
+    } catch (error) {
+        showEmailStatus(`
+            <div style="text-align: center;">
+                <h4 style="color: #e74c3c;">❌ Failed to Resend Email</h4>
+                <p>Error: ${error.message}</p>
+                <button onclick="showManualEmailOption(currentSurveyData, '${responseId}')" 
+                        style="margin: 10px; padding: 10px 15px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    📧 Use Manual Method Instead
+                </button>
+            </div>
+        `, 'error');
+    }
+}
 
-
-// Manual email fallback
+// Manual email fallback option
 function showManualEmailOption(surveyResults, responseId) {
-    const subject = `Attachment Style Assessment Results - ${responseId || Date.now()}`;
+    const subject = `Attachment Style Assessment Results - ${responseId}`;
     const emailBody = createEmailBody(surveyResults, responseId);
     
     showEmailStatus(`
         <div style="text-align: center;">
-            <h3 style="color: #e74c3c; margin-bottom: 15px;">📧 Manual Email Required</h3>
-            <p><strong>Please send your results manually:</strong></p>
+            <h3 style="color: #f39c12; margin-bottom: 15px;">📧 Manual Email Required</h3>
+            <p><strong>Please send your results manually using one of these methods:</strong></p>
             
-            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
-                <p><strong>Step 1:</strong> Open your email app</p>
-                <p><strong>Step 2:</strong> Send to: <strong>${HARD_CODED_EMAIL}</strong></p>
-                <p><strong>Step 3:</strong> Use subject: <strong>${subject}</strong></p>
-                <p><strong>Step 4:</strong> Copy and paste the results below:</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0;">
+                <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; text-align: center;">
+                    <h4 style="color: #1877f2; margin-bottom: 10px;">Method 1: Webmail</h4>
+                    <p>Open your webmail directly:</p>
+                    <button onclick="openGmail('${subject}', \`${emailBody.replace(/'/g, "\\'")}\`)" 
+                            style="width: 100%; padding: 10px; background: #ea4335; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px 0;">
+                        📧 Open Gmail
+                    </button>
+                    <button onclick="openOutlook('${subject}', \`${emailBody.replace(/'/g, "\\'")}\`)" 
+                            style="width: 100%; padding: 10px; background: #0078d4; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px 0;">
+                        📧 Open Outlook
+                    </button>
+                </div>
+                
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; text-align: center;">
+                    <h4 style="color: #856404; margin-bottom: 10px;">Method 2: Copy & Paste</h4>
+                    <p>Copy all content and paste into any email:</p>
+                    <button onclick="copyFullEmailContent('${subject}', \`${emailBody.replace(/'/g, "\\'")}\`)" 
+                            style="width: 100%; padding: 10px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px 0;">
+                        📋 Copy All Content
+                    </button>
+                </div>
             </div>
             
-            <div style="background: white; padding: 15px; border: 2px solid #3498db; border-radius: 8px; margin: 15px 0;">
-                <pre style="white-space: pre-wrap; font-family: Arial; text-align: left;">${emailBody}</pre>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+                <p><strong>Recipient:</strong> ${HARD_CODED_EMAIL}</p>
+                <p><strong>Subject:</strong> ${subject}</p>
+                <details>
+                    <summary>Preview Email Content</summary>
+                    <div style="background: white; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px; max-height: 200px; overflow-y: auto;">
+                        <pre style="white-space: pre-wrap; font-size: 12px;">${emailBody}</pre>
+                    </div>
+                </details>
             </div>
-            
-            <button onclick="copyEmailContent()" style="padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                📋 Copy Results to Clipboard
-            </button>
         </div>
     `, 'info');
     
+    // Store for retry purposes
     window.manualSurveyResults = surveyResults;
+    window.currentResponseId = responseId;
 }
 
-
-// Safe function to open email client
-function openEmailClient() {
-    if (window.currentMailtoLink) {
-        console.log('Opening email client with link:', window.currentMailtoLink);
-        window.location.href = window.currentMailtoLink;
-    } else {
-        showManualEmailOption();
-    }
+// Webmail functions
+function openGmail(subject, body) {
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${HARD_CODED_EMAIL}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(gmailUrl, '_blank');
 }
 
-// Track email clicks
-function trackEmailClick() {
-    console.log('Email link clicked');
-    // You can add analytics here if needed
+function openOutlook(subject, body) {
+    const outlookUrl = `https://outlook.live.com/owa/?path=/mail/action/compose&to=${HARD_CODED_EMAIL}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(outlookUrl, '_blank');
 }
 
-// Keep your existing createEmailBody function, but here's an improved version:
+// Copy full email content
+function copyFullEmailContent(subject, body) {
+    const fullContent = `To: ${HARD_CODED_EMAIL}\nSubject: ${subject}\n\n${body}`;
+    
+    navigator.clipboard.writeText(fullContent).then(() => {
+        showEmailStatus(`
+            <div style="text-align: center;">
+                <h4 style="color: #27ae60;">✅ Content Copied to Clipboard!</h4>
+                <p>Now open your email app and paste the content.</p>
+                <p><strong>Recipient:</strong> ${HARD_CODED_EMAIL}</p>
+            </div>
+        `, 'success');
+    }).catch(() => {
+        showEmailStatus('❌ Could not copy to clipboard. Please copy manually.', 'error');
+    });
+}
+
+// Email body creation
 function createEmailBody(results, responseId) {
     const safeResults = results || {};
     const categoryScores = safeResults.categoryScores || { A: 0, B: 0, C: 0 };
@@ -444,86 +509,18 @@ SUMMARY:
 - No Answers: ${totalNo}
 - Completion Rate: ${Math.round((totalYes / totalQuestions) * 100)}%
 
+DETAILED ANSWERS:
+${Object.entries(safeResults.answers || {}).map(([q, answer]) => 
+    `Q${q.substring(1)}: ${answer === '1' ? 'YES' : 'NO'}`
+).join('\n')}
+
 This assessment was completed via the online Attachment Style Assessment tool.
 
 --
 Please do not reply to this automated message.`;
 }
 
-function copyEmailContent() {
-    const subject = `Attachment Style Assessment Results - ${Date.now()}`;
-    const emailBody = createEmailBody(window.manualSurveyResults, Date.now());
-    const fullContent = `To: ${HARD_CODED_EMAIL}\nSubject: ${subject}\n\n${emailBody}`;
-    
-    navigator.clipboard.writeText(fullContent).then(() => {
-        alert('✅ Email content copied to clipboard! Now paste it into your email.');
-    }).catch(() => {
-        alert('❌ Could not copy to clipboard. Please copy manually.');
-    });
-}
-
-// Helper function to create email body
-function createEmailBody(results, responseId) {
-    const safeResults = results || {};
-    const categoryScores = safeResults.categoryScores || { A: 0, B: 0, C: 0 };
-    const dominantCategory = safeResults.dominantCategory || 'Unknown';
-    const totalYes = safeResults.totalYes || 0;
-    const totalNo = safeResults.totalNo || 0;
-    const totalQuestions = safeResults.totalQuestions || 0;
-    
-    return `
-ATTACHMENT STYLE ASSESSMENT RESULTS
-
-Response ID: ${responseId}
-Assessment Date: ${new Date().toLocaleString()}
-
-CATEGORY SCORES:
-• Anxious Attachment (A): ${categoryScores.A}
-• Secure Attachment (B): ${categoryScores.B}  
-• Avoidant Attachment (C): ${categoryScores.C}
-
-DOMINANT ATTACHMENT STYLE: ${dominantCategory}
-
-SUMMARY:
-- Total Questions: ${totalQuestions}
-- Yes Answers: ${totalYes}
-- No Answers: ${totalNo}
-- Completion Rate: ${Math.round((totalYes / totalQuestions) * 100)}%
-
-DETAILED ANSWERS:
-${Object.entries(safeResults.answers || {}).map(([q, answer]) => 
-    `Q${q.substring(1)}: ${answer === '1' ? 'YES' : 'NO'}`
-).join('\n')}
-
-USER INFORMATION:
-- Browser: ${navigator.userAgent.split(') ')[0].split(' (')[1] || 'Unknown'}
-- Page: ${window.location.href}
-- Referrer: ${document.referrer || 'Direct access'}
-
---
-This assessment helps identify relationship patterns based on attachment theory.
-The results are automatically generated and should be interpreted by a qualified professional.
-    `.trim();
-}
-
-// Manual email sending function
-function sendManualEmail() {
-    if (window.manualEmailLink) {
-        window.location.href = window.manualEmailLink;
-    } else {
-        // Create new mailto link if needed
-        const subject = `Attachment Style Assessment Results - ${Date.now()}`;
-        const emailBody = createEmailBody(window.manualSurveyResults, Date.now());
-        const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
-        window.location.href = mailtoLink;
-    }
-}
-
-// Also update the useMailtoFallback function to use the new system
-function useMailtoFallback() {
-    sendManualEmail();
-}
-
+// Email status display function
 function showEmailStatus(message, type) {
     const statusElement = document.getElementById('email-submission-status');
     const colors = {
@@ -544,77 +541,6 @@ function showEmailStatus(message, type) {
     }
 }
 
-function createMailtoFallback(results) {
-    // Safe property access with fallbacks
-    const responseId = results?.responseId || Date.now();
-    const categoryScores = results?.categoryScores || { A: 0, B: 0, C: 0 };
-    const dominantCategory = results?.dominantCategory || 'Unknown';
-    const totalYes = results?.totalYes || 0;
-    const totalNo = results?.totalNo || 0;
-    const percentageYes = results?.percentageYes || 0;
-    const timestamp = results?.timestamp || new Date().toISOString();
-    const userAgent = results?.userAgent || 'Unknown';
-    const referrer = results?.referrer || 'Direct';
-    const pageUrl = results?.pageUrl || 'Unknown';
-    
-    const subject = `Attachment Style Assessment Results - ${responseId}`;
-    
-    const body = `
-ATTACHMENT STYLE ASSESSMENT RESULTS
-
-Response ID: ${responseId}
-Assessment Date: ${new Date(timestamp).toLocaleString()}
-
-CATEGORY SCORES:
-• Anxious Attachment (A): ${categoryScores.A}/15
-• Secure Attachment (B): ${categoryScores.B}/15  
-• Avoidant Attachment (C): ${categoryScores.C}/15
-
-DOMINANT ATTACHMENT STYLE: ${dominantCategory}
-
-SUMMARY:
-- Total YES Answers: ${totalYes}
-- Total NO Answers: ${totalNo}
-- Completion Rate: ${percentageYes}% YES responses
-
-TECHNICAL INFO:
-- User Agent: ${userAgent}
-- Referrer: ${referrer}
-- Page URL: ${pageUrl}
-
-This assessment helps identify relationship patterns based on attachment theory.
-    `.trim();
-    
-    return `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-function useMailtoFallback() {
-    if (window.fallbackMailtoLink) {
-        window.location.href = window.fallbackMailtoLink;
-    }
-}
-
-function saveEmailSubmission(results, success) {
-    try {
-        const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
-        if (responses.length > 0) {
-            const latestResponse = responses[responses.length - 1];
-            latestResponse.emailSent = success;
-            latestResponse.emailSentTo = HARD_CODED_EMAIL;
-            latestResponse.emailSentAt = new Date().toISOString();
-            latestResponse.emailSuccess = success;
-            
-            if (!success && window.fallbackMailtoLink) {
-                latestResponse.emailFallbackLink = window.fallbackMailtoLink;
-            }
-            
-            localStorage.setItem('surveyResponses', JSON.stringify(responses));
-        }
-    } catch (error) {
-        console.error('Error saving email submission:', error);
-    }
-}
-
 function showThankYouScreen(result) {
     document.getElementById('survey-form').classList.remove('active');
     document.getElementById('thank-you-screen').classList.add('active');
@@ -628,7 +554,11 @@ function showThankYouScreen(result) {
     const responseIdElement = document.getElementById('response-id');
     
     if (messageElement) {
-        messageElement.innerHTML = '✅ <strong>Assessment Complete!</strong> Your results have been processed.';
+        if (result.emailSent) {
+            messageElement.innerHTML = '✅ <strong>Assessment Complete!</strong> Your results have been processed and emailed.';
+        } else {
+            messageElement.innerHTML = '⚠️ <strong>Assessment Complete!</strong> Your results have been processed. Please use manual email option.';
+        }
     }
     
     if (responseIdElement && result.responseId) {
@@ -637,6 +567,9 @@ function showThankYouScreen(result) {
     
     loadStatistics();
     showResponseCount();
+    
+    // Show admin panel if needed
+    showAdminPanel();
 }
 
 function displayCategoryResults() {
@@ -647,13 +580,15 @@ function displayCategoryResults() {
     const categoryLabels = {
         A: 'Anxious Attachment Style',
         B: 'Secure Attachment Style', 
-        C: 'Avoidant Attachment Style'
+        C: 'Avoidant Attachment Style',
+        Mixed: 'Mixed Attachment Style'
     };
     
     const categoryDescriptions = {
         A: 'You may experience anxiety in relationships and seek high levels of intimacy and approval.',
         B: 'You feel comfortable with intimacy and are generally warm and loving in relationships.',
-        C: 'You value independence and may feel uncomfortable with too much closeness.'
+        C: 'You value independence and may feel uncomfortable with too much closeness.',
+        Mixed: 'You show characteristics of multiple attachment styles.'
     };
     
     resultsContainer.innerHTML = `
@@ -696,6 +631,17 @@ function showErrorScreen(errorMessage) {
     
     displayCategoryResults();
     showResponseCount();
+    showAdminPanel();
+}
+
+// Admin panel functions
+function showAdminPanel() {
+    // Show admin panel for debugging
+    const adminPanel = document.getElementById('admin-panel');
+    if (adminPanel) {
+        adminPanel.style.display = 'block';
+    }
+    showResponseCount();
 }
 
 async function loadStatistics() {
@@ -712,13 +658,26 @@ async function loadStatistics() {
 }
 
 function displayStatistics(stats) {
-    const statsElement = document.getElementById('statistics');
+    const statsElement = document.getElementById('response-stats');
     if (!statsElement) return;
     
     statsElement.innerHTML = `
         <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 15px 0;">
             <h4>📊 Survey Statistics</h4>
-            <div>Total Responses: <strong>${stats.totalResponses}</strong></div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 24px; font-weight: bold; color: #3498db;">${stats.totalResponses || 0}</div>
+                    <div style="font-size: 12px; color: #666;">Total Responses</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 24px; font-weight: bold; color: #27ae60;">${stats.totalEmailsSent || 0}</div>
+                    <div style="font-size: 12px; color: #666;">Emails Sent</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 24px; font-weight: bold; color: #f39c12;">${stats.emailSuccessRate || '0%'}</div>
+                    <div style="font-size: 12px; color: #666;">Success Rate</div>
+                </div>
+            </div>
         </div>
     `;
 }
@@ -751,7 +710,8 @@ function shareOnFacebook() {
     const categoryLabels = {
         A: 'Anxious Attachment Style',
         B: 'Secure Attachment Style',
-        C: 'Avoidant Attachment Style'
+        C: 'Avoidant Attachment Style',
+        Mixed: 'Mixed Attachment Style'
     };
     
     const shareText = `I just discovered my attachment style is ${categoryLabels[dominantCategory]}! Take the attachment style assessment too:`;
