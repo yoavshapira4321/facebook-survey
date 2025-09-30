@@ -298,7 +298,7 @@ function saveToLocalStorage(data) {
 
 async function sendResultsToEmail(surveyResults, responseId) {
     try {
-        showEmailStatus('📨 Sending your results via email...', 'loading');
+        showEmailStatus('📨 Preparing your results for delivery...', 'loading');
         
         // Ensure we have valid data
         const emailResponseId = responseId || surveyResults?.responseId || Date.now();
@@ -308,48 +308,133 @@ async function sendResultsToEmail(surveyResults, responseId) {
         const subject = `Attachment Style Assessment Results - ${emailResponseId}`;
         const emailBody = createEmailBody(safeResults, emailResponseId);
         
-        // Create mailto link that will open user's email client
+        // Create mailto link
         const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
         
-        // Try to open email client automatically
-        const emailWindow = window.open(mailtoLink, '_blank');
+        // Show success message with clickable email button
+        showEmailStatus(`
+            ✅ Your results are ready to be sent!
+            <br><br>
+            <strong>Please click the button below to open your email client and send the results:</strong>
+            <br>
+            <button onclick="openEmailClient('${mailtoLink.replace(/'/g, "\\'")}')" 
+                    style="margin: 15px 0; padding: 15px 25px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                📧 Send Results via Email
+            </button>
+            <br>
+            <small style="color: #666;">
+                This will open your default email client with all results pre-filled.
+            </small>
+        `, 'success');
         
-        // Check if email client opened successfully
-        if (emailWindow) {
-            console.log('✅ Email client opened successfully');
-            showEmailStatus('✅ Email client opened! Please review and send the email to complete the process.', 'success');
-            saveEmailSubmission(safeResults, true);
-            return true;
-        } else {
-            // Fallback: show manual option
-            throw new Error('Could not open email client automatically');
+        // Also show the mailto link as a clickable text link as backup
+        const emailLinksDiv = document.getElementById('email-links');
+        if (emailLinksDiv) {
+            emailLinksDiv.innerHTML = `
+                <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                    <strong>Alternative:</strong> 
+                    <a href="${mailtoLink}" onclick="trackEmailClick()" style="color: #3498db; text-decoration: underline;">
+                        Click here if the button doesn't work
+                    </a>
+                </div>
+            `;
         }
         
-    } catch (error) {
-        console.error('Automatic email failed:', error);
+        saveEmailSubmission(safeResults, true);
+        return true;
         
-        // Fallback: show manual email option
+    } catch (error) {
+        console.error('Email preparation failed:', error);
+        
+        // Fallback with simple mailto link
         const subject = `Attachment Style Assessment Results - ${responseId || Date.now()}`;
         const emailBody = createEmailBody(surveyResults, responseId);
         const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
         
         showEmailStatus(`
-            ❌ Could not open email automatically. 
+            ❌ Could not prepare email automatically.
             <br><br>
-            <strong>Please click below to send your results manually:</strong>
+            <strong>Please use the link below to send your results:</strong>
             <br>
-            <button onclick="sendManualEmail()" style="margin: 10px 0; padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
-                📧 Open Email to Send Results
-            </button>
+            <a href="${mailtoLink}" 
+               onclick="trackEmailClick()"
+               style="display: inline-block; margin: 15px 0; padding: 15px 25px; background: #3498db; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">
+                📧 Send Results via Email
+            </a>
         `, 'error');
-        
-        // Store for manual sending
-        window.manualEmailLink = mailtoLink;
-        window.manualSurveyResults = surveyResults;
         
         saveEmailSubmission(surveyResults, false);
         return false;
     }
+}
+
+// Safe function to open email client
+function openEmailClient(mailtoLink) {
+    try {
+        // Track that user clicked the button
+        console.log('User clicked email send button');
+        
+        // Open email client
+        window.location.href = mailtoLink;
+        
+        // Update status to show email was opened
+        setTimeout(() => {
+            const statusElement = document.getElementById('email-submission-status');
+            if (statusElement) {
+                statusElement.innerHTML += `
+                    <div style="margin-top: 10px; padding: 10px; background: #d4edda; color: #155724; border-radius: 5px;">
+                        ✅ Email client opened! Please click "Send" to complete the process.
+                    </div>
+                `;
+            }
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Failed to open email client:', error);
+        // Fallback - try direct navigation
+        window.location.href = mailtoLink;
+    }
+}
+
+// Track email clicks
+function trackEmailClick() {
+    console.log('Email link clicked');
+    // You can add analytics here if needed
+}
+
+// Keep your existing createEmailBody function, but here's an improved version:
+function createEmailBody(results, responseId) {
+    const safeResults = results || {};
+    const categoryScores = safeResults.categoryScores || { A: 0, B: 0, C: 0 };
+    const dominantCategory = safeResults.dominantCategory || 'Unknown';
+    const totalYes = safeResults.totalYes || 0;
+    const totalNo = safeResults.totalNo || 0;
+    const totalQuestions = safeResults.totalQuestions || 0;
+    
+    // Simplified email body to avoid URI length limits
+    return `
+ATTACHMENT STYLE ASSESSMENT - RESULTS
+
+Response ID: ${responseId}
+Completed: ${new Date().toLocaleString()}
+
+YOUR SCORES:
+• Anxious (A): ${categoryScores.A}
+• Secure (B): ${categoryScores.B}  
+• Avoidant (C): ${categoryScores.C}
+
+DOMINANT STYLE: ${dominantCategory}
+
+SUMMARY:
+- Questions: ${totalQuestions}
+- Yes: ${totalYes}
+- No: ${totalNo}
+
+Thank you for completing the assessment!
+
+--
+This is an automated result from the Attachment Style Assessment.
+    `.trim();
 }
 
 // Helper function to create email body

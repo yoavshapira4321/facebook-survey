@@ -152,3 +152,29 @@ button:disabled {
         width: 100%;
     }
 }
+
+.share-btn {
+    padding: 12px 20px;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: transform 0.2s ease;
+}
+
+.share-btn:hover {
+    transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+    .share-options {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .share-btn {
+        width: 100%;
+    }
+}
