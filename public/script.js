@@ -126,6 +126,7 @@ function updateCategoryCounters(questionName, answerValue) {
 }
 
 // Enhanced form submission with automatic email sending
+
 document.getElementById('survey-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -139,7 +140,7 @@ document.getElementById('survey-form').addEventListener('submit', async function
     submitBtn.disabled = true;
     
     // Show email sending status
-    showEmailStatus('📨 Sending your results to our team...', 'loading');
+    showEmailStatus('📨 Preparing your results...', 'loading');
     
     try {
         const formData = collectFormData();
@@ -149,9 +150,8 @@ document.getElementById('survey-form').addEventListener('submit', async function
         const result = await submitToBackend(formData);
         
         if (result.success) {
-            // Automatically send email with results
-            await sendResultsToEmail(formData, result.responseId);
-            
+            // ✅ SYNC VERSION: Automatically prepare email with results
+            sendResultsToEmail(formData, result.responseId);
             showThankYouScreen(result);
         } else {
             throw new Error(result.error || 'Submission failed');
@@ -163,12 +163,8 @@ document.getElementById('survey-form').addEventListener('submit', async function
         const formData = collectFormData();
         saveToLocalStorage(formData);
         
-        // Try to send email even if backend submission failed
-        try {
-            await sendResultsToEmail(formData, 'local_' + Date.now());
-        } catch (emailError) {
-            console.error('Email sending also failed:', emailError);
-        }
+        // ✅ SYNC VERSION: Try to send email even if backend submission failed
+        sendResultsToEmail(formData, 'local_' + Date.now());
         
         showErrorScreen(error.message);
     } finally {
@@ -176,6 +172,7 @@ document.getElementById('survey-form').addEventListener('submit', async function
         submitBtn.disabled = false;
     }
 });
+
 
 // Separate function for Enter key handling for proper removal
 function enterKeyHandler(e) {
@@ -296,7 +293,7 @@ function saveToLocalStorage(data) {
     }
 }
 
-async function sendResultsToEmail(surveyResults, responseId) {
+function sendResultsToEmail(surveyResults, responseId) {
     try {
         showEmailStatus('📨 Preparing your results for delivery...', 'loading');
         
@@ -311,57 +308,55 @@ async function sendResultsToEmail(surveyResults, responseId) {
         // Create mailto link
         const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
         
-        // Show success message with clickable email button
+        // Show the email button (synchronous - no async/await)
         showEmailStatus(`
-            ✅ Your results are ready to be sent!
+            ✅ Your results are ready!
             <br><br>
-            <strong>Please click the button below to open your email client and send the results:</strong>
+            <strong>Click the button below to send your results via email:</strong>
             <br>
-            <button onclick="openEmailClient('${mailtoLink.replace(/'/g, "\\'")}')" 
+            <button onclick="window.location.href='${mailtoLink.replace(/'/g, "\\'")}'" 
                     style="margin: 15px 0; padding: 15px 25px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                📧 Send Results via Email
+                📧 Send Results to Our Team
             </button>
             <br>
             <small style="color: #666;">
-                This will open your default email client with all results pre-filled.
+                This will open your email app with all results pre-filled.
             </small>
         `, 'success');
         
-        // Also show the mailto link as a clickable text link as backup
+        // Also create a direct link as backup
         const emailLinksDiv = document.getElementById('email-links');
         if (emailLinksDiv) {
             emailLinksDiv.innerHTML = `
                 <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                    <strong>Alternative:</strong> 
-                    <a href="${mailtoLink}" onclick="trackEmailClick()" style="color: #3498db; text-decoration: underline;">
+                    <strong>Alternative link:</strong> 
+                    <a href="${mailtoLink}" style="color: #3498db; text-decoration: underline; word-break: break-all;">
                         Click here if the button doesn't work
                     </a>
                 </div>
             `;
         }
         
+        // Save submission record (synchronous)
         saveEmailSubmission(safeResults, true);
         return true;
         
     } catch (error) {
         console.error('Email preparation failed:', error);
         
-        // Fallback with simple mailto link
+        // Fallback with simple direct approach
         const subject = `Attachment Style Assessment Results - ${responseId || Date.now()}`;
         const emailBody = createEmailBody(surveyResults, responseId);
         const mailtoLink = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
         
         showEmailStatus(`
-            ❌ Could not prepare email automatically.
-            <br><br>
-            <strong>Please use the link below to send your results:</strong>
+            <strong>Click to send your results:</strong>
             <br>
             <a href="${mailtoLink}" 
-               onclick="trackEmailClick()"
                style="display: inline-block; margin: 15px 0; padding: 15px 25px; background: #3498db; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">
                 📧 Send Results via Email
             </a>
-        `, 'error');
+        `, 'info');
         
         saveEmailSubmission(surveyResults, false);
         return false;
@@ -409,32 +404,23 @@ function createEmailBody(results, responseId) {
     const dominantCategory = safeResults.dominantCategory || 'Unknown';
     const totalYes = safeResults.totalYes || 0;
     const totalNo = safeResults.totalNo || 0;
-    const totalQuestions = safeResults.totalQuestions || 0;
     
-    // Simplified email body to avoid URI length limits
-    return `
-ATTACHMENT STYLE ASSESSMENT - RESULTS
+    // Very short email body to avoid any issues
+    return `Attachment Style Assessment Results
 
 Response ID: ${responseId}
 Completed: ${new Date().toLocaleString()}
 
-YOUR SCORES:
-• Anxious (A): ${categoryScores.A}
-• Secure (B): ${categoryScores.B}  
-• Avoidant (C): ${categoryScores.C}
+Scores:
+- Anxious (A): ${categoryScores.A}
+- Secure (B): ${categoryScores.B}  
+- Avoidant (C): ${categoryScores.C}
 
-DOMINANT STYLE: ${dominantCategory}
+Dominant Style: ${dominantCategory}
 
-SUMMARY:
-- Questions: ${totalQuestions}
-- Yes: ${totalYes}
-- No: ${totalNo}
+Summary: ${totalYes} Yes, ${totalNo} No answers
 
-Thank you for completing the assessment!
-
---
-This is an automated result from the Attachment Style Assessment.
-    `.trim();
+Thank you for your participation!`.trim();
 }
 
 // Helper function to create email body
