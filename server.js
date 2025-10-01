@@ -5,12 +5,92 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+const nodemailer = require('nodemailer');
 
-console.log('=== ENVIRONMENT VARIABLES ===');
-console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET');
-console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'SET' : 'NOT SET');
-console.log('EMAIL_TO:', process.env.EMAIL_TO ? 'SET' : 'NOT SET');
+// Email configuration
+function createTransporter() {
+    return nodemailer.createTransporter({
+        service: 'gmail',
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+        }
+    });
+}
+
+// Email sending endpoint
+app.post('/api/send-email', async (req, res) => {
+    try {
+        const { results, responseId } = req.body;
+        
+        console.log('Attempting to send email for:', responseId);
+        
+        // Check if email credentials are available
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.log('Email credentials not set');
+            return res.json({
+                success: false,
+                error: 'Email service not configured'
+            });
+        }
+
+        const transporter = createTransporter();
+        
+        // Verify connection
+        await transporter.verify();
+        console.log('Email connection verified');
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: process.env.EMAIL_TO || process.env.EMAIL_USER,
+            subject: `Attachment Style Results - ${responseId}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px;">
+                    <h2>Attachment Style Assessment Results</h2>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
+                        <p><strong>Response ID:</strong> ${responseId}</p>
+                        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+                    </div>
+                    <h3>Your Scores:</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 15px 0;">
+                        <div style="text-align: center; padding: 10px; background: #e74c3c; color: white; border-radius: 5px;">
+                            <div style="font-size: 24px; font-weight: bold;">${results.categoryScores?.A || 0}</div>
+                            <div>Anxious (A)</div>
+                        </div>
+                        <div style="text-align: center; padding: 10px; background: #27ae60; color: white; border-radius: 5px;">
+                            <div style="font-size: 24px; font-weight: bold;">${results.categoryScores?.B || 0}</div>
+                            <div>Secure (B)</div>
+                        </div>
+                        <div style="text-align: center; padding: 10px; background: #3498db; color: white; border-radius: 5px;">
+                            <div style="font-size: 24px; font-weight: bold;">${results.categoryScores?.C || 0}</div>
+                            <div>Avoidant (C)</div>
+                        </div>
+                    </div>
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                        <strong>Dominant Style:</strong> ${results.dominantCategory || 'Unknown'}
+                    </div>
+                    <p>This assessment was completed via the Attachment Style Assessment tool.</p>
+                </div>
+            `
+        };
+
+        const result = await transporter.sendMail(mailOptions);
+        console.log('Email sent successfully:', result.messageId);
+        
+        res.json({
+            success: true,
+            message: 'Email sent successfully',
+            messageId: result.messageId
+        });
+
+    } catch (error) {
+        console.error('Email sending failed:', error);
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
