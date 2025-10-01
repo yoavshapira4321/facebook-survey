@@ -1,425 +1,548 @@
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const app = express();
-const PORT = process.env.PORT || 3000;
+let currentQuestion = 0;
+const totalQuestions = document.querySelectorAll('.question').length;
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static('.')); // Serve from root directory
+// Counters for each category
+let categoryCounters = {
+    A: 0,  // Anxious category
+    B: 0,  // Secure category  
+    C: 0   // Avoidant category
+};
 
-// Data file path
-const dataDir = path.join(__dirname, 'data');
-const dataFile = path.join(dataDir, 'survey-responses.json');
+// Track which questions have been counted to avoid duplicates
+let countedQuestions = new Set();
 
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+// Backend configuration - will work relative to the same domain
+const API_BASE_URL = window.location.origin;
+
+// Hard-coded email address
+const HARD_CODED_EMAIL = "yoavshapira4321@gmail.com";
+
+// Track current survey data globally
+let currentSurveyData = null;
+
+function startSurvey() {
+    document.getElementById('welcome-screen').classList.remove('active');
+    document.getElementById('survey-form').classList.add('active');
+    updateProgress();
+    
+    // Reset counters when survey starts
+    resetCategoryCounters();
+    
+    // Add Enter key listener when survey starts
+    addEnterKeyListener();
 }
 
-// Initialize data file if it doesn't exist
-if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify([], null, 2));
-    console.log('Created new survey responses file');
+function showQuestion(index) {
+    document.querySelectorAll('.question').forEach(q => q.classList.remove('active'));
+    document.querySelectorAll('.question')[index].classList.add('active');
+    
+    document.getElementById('prev-btn').disabled = index === 0;
+    document.getElementById('next-btn').style.display = index === totalQuestions - 1 ? 'none' : 'block';
+    document.getElementById('submit-btn').style.display = index === totalQuestions - 1 ? 'block' : 'none';
+    
+    updateProgress();
+    
+    // Auto-focus on the first radio button for better keyboard navigation
+    autoFocusCurrentQuestion();
 }
 
-// Helper function to read survey data
-function readSurveyData() {
-    try {
-        const data = fs.readFileSync(dataFile, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        console.error('Error reading survey data:', error);
-        return [];
+function nextQuestion() {
+    if (currentQuestion < totalQuestions - 1) {
+        currentQuestion++;
+        showQuestion(currentQuestion);
     }
 }
 
-// Helper function to write survey data
-function writeSurveyData(data) {
+function previousQuestion() {
+    if (currentQuestion > 0) {
+        currentQuestion--;
+        showQuestion(currentQuestion);
+    }
+}
+
+function updateProgress() {
+    const progress = ((currentQuestion + 1) / totalQuestions) * 100;
+    if (!document.querySelector('.progress-bar')) {
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        progressBar.innerHTML = '<div class="progress"></div>';
+        document.getElementById('survey-form').insertBefore(progressBar, document.getElementById('survey-form').firstChild);
+    }
+    document.querySelector('.progress').style.width = `${progress}%`;
+}
+
+// Add Enter key listener
+function addEnterKeyListener() {
+    document.addEventListener('keydown', enterKeyHandler);
+}
+
+// Separate function for Enter key handling for proper removal
+function enterKeyHandler(e) {
+    if (e.key === 'Enter' || e.keyCode === 13) {
+        e.preventDefault();
+        
+        // Check if we're on the last question
+        if (currentQuestion === totalQuestions - 1) {
+            document.getElementById('survey-form').dispatchEvent(new Event('submit'));
+        } else {
+            nextQuestion();
+        }
+    }
+}
+
+// Auto-focus on the first radio button of the current question
+function autoFocusCurrentQuestion() {
+    const currentQuestionElement = document.querySelectorAll('.question')[currentQuestion];
+    if (currentQuestionElement) {
+        const firstRadio = currentQuestionElement.querySelector('input[type="radio"]');
+        if (firstRadio) {
+            firstRadio.focus();
+        }
+    }
+}
+
+// Reset all category counters
+function resetCategoryCounters() {
+    categoryCounters = { A: 0, B: 0, C: 0 };
+    countedQuestions.clear();
+}
+
+// Update category counters based on answer (only once per question)
+function updateCategoryCounters(questionName, answerValue) {
+    // Skip if we've already counted this question
+    if (countedQuestions.has(questionName)) {
+        return;
+    }
+    
+    const questionElement = document.querySelector(`[name="${questionName}"]`).closest('.question');
+    if (!questionElement) return;
+    
+    const category = questionElement.getAttribute('data-category');
+    const isPositiveAnswer = answerValue === "1"; // "1" represents YES
+    
+    if (isPositiveAnswer && category) {
+        categoryCounters[category]++;
+        countedQuestions.add(questionName); // Mark as counted
+        console.log(`Category ${category} counter increased to: ${categoryCounters[category]} for question ${questionName}`);
+    }
+}
+
+// Enhanced form submission with automatic email sending
+document.getElementById('survey-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    // Remove Enter key listener during submission to prevent conflicts
+    document.removeEventListener('keydown', enterKeyHandler);
+    
+    // Show loading state
+    const submitBtn = document.getElementById('submit-btn');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Submitting...';
+    submitBtn.disabled = true;
+    
+    // Show email sending status
+    showEmailStatus('📨 Processing your results and sending email...', 'loading');
+    
     try {
-        fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+        const formData = collectFormData();
+        currentSurveyData = formData; // Store globally for retry purposes
+        console.log('Submitting survey data with categories:', formData);
+        
+        // Submit to backend (this now automatically sends email)
+        const result = await submitToBackend(formData);
+        
+        if (result.success) {
+            // Show success message with email status
+            if (result.emailSent) {
+                showEmailStatus(`
+                    <div style="text-align: center;">
+                        <h3 style="color: #27ae60; margin-bottom: 15px;">✅ Results Sent Successfully!</h3>
+                        <p><strong>Your results have been automatically delivered to:</strong></p>
+                        <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                            <strong>${HARD_CODED_EMAIL}</strong>
+                        </div>
+                        <p style="font-size: 14px; color: #666;">
+                            Email Message ID: ${result.emailMessageId || 'N/A'}<br>
+                            Check your inbox for confirmation.
+                        </p>
+                    </div>
+                `, 'success');
+            } else {
+                // Email failed but survey was saved
+                showEmailStatus(`
+                    <div style="text-align: center;">
+                        <h3 style="color: #e74c3c; margin-bottom: 15px;">⚠️ Survey Saved But Email Failed</h3>
+                        <p>Your results were saved but we couldn't send the email automatically.</p>
+                        <p><strong>Error:</strong> ${result.emailError || 'Unknown error'}</p>
+                        <div style="margin: 15px 0;">
+                            <button onclick="sendManualEmail()" 
+                                    style="margin: 5px; padding: 10px 15px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                📧 Send Manual Email
+                            </button>
+                        </div>
+                    </div>
+                `, 'error');
+            }
+            
+            showThankYouScreen(result);
+        } else {
+            throw new Error(result.error || 'Submission failed');
+        }
+        
+    } catch (error) {
+        console.error('Submission error:', error);
+        // Fallback to localStorage
+        const formData = collectFormData();
+        currentSurveyData = formData;
+        saveToLocalStorage(formData);
+        
+        // Show manual email option
+        showManualEmailOption(formData, 'local_' + Date.now());
+        showErrorScreen(error.message);
+    } finally {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+});
+
+function collectFormData() {
+    const formData = new FormData(document.getElementById('survey-form'));
+    const responseId = 'resp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    const data = {
+        responseId: responseId,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        referrer: document.referrer,
+        pageUrl: window.location.href,
+        categoryScores: { ...categoryCounters },
+        totalScoreA: categoryCounters.A,
+        totalScoreB: categoryCounters.B, 
+        totalScoreC: categoryCounters.C
+    };
+    
+    // Process all question answers
+    const answers = {};
+    let totalYesAnswers = 0;
+    let totalNoAnswers = 0;
+    
+    // Convert FormData to object and track answers
+    for (let [key, value] of formData.entries()) {
+        answers[key] = value;
+        
+        // Count YES/NO answers
+        if (value === "1") totalYesAnswers++;
+        if (value === "0") totalNoAnswers++;
+        
+        // Update category counters for each answer (only once)
+        updateCategoryCounters(key, value);
+    }
+    
+    data.answers = answers;
+    data.totalYes = totalYesAnswers;
+    data.totalNo = totalNoAnswers;
+    data.totalQuestions = totalQuestions;
+    
+    // Calculate percentages
+    data.percentageYes = totalYesAnswers > 0 ? Math.round((totalYesAnswers / totalQuestions) * 100) : 0;
+    data.percentageNo = totalNoAnswers > 0 ? Math.round((totalNoAnswers / totalQuestions) * 100) : 0;
+    
+    // Determine dominant category
+    data.dominantCategory = getDominantCategory();
+    
+    console.log('Final category scores:', categoryCounters);
+    console.log('Questions counted:', countedQuestions.size);
+    console.log('Dominant category:', data.dominantCategory);
+    
+    return data;
+}
+
+function getDominantCategory() {
+    const scores = Object.entries(categoryCounters);
+    const maxScore = Math.max(...scores.map(([_, score]) => score));
+    const dominantCategories = scores.filter(([_, score]) => score === maxScore).map(([cat]) => cat);
+    
+    return dominantCategories.length === 1 ? dominantCategories[0] : 'Mixed';
+}
+
+async function submitToBackend(data) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/survey`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+        }
+        
+        return result;
+        
+    } catch (error) {
+        console.error('Backend submission failed:', error);
+        throw error;
+    }
+}
+
+function saveToLocalStorage(data) {
+    try {
+        const existingData = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
+        data.localBackup = true;
+        data.backupTimestamp = new Date().toISOString();
+        data.backupId = 'backup_' + Date.now();
+        existingData.push(data);
+        localStorage.setItem('surveyResponses', JSON.stringify(existingData));
+        console.log('Saved to localStorage as backup:', data);
         return true;
     } catch (error) {
-        console.error('Error writing survey data:', error);
+        console.error('LocalStorage save failed:', error);
         return false;
     }
 }
 
-// Email configuration (simplified - will use manual email for now)
-const nodemailer = require('nodemailer');
-
-function createTransporter() {
-    // Only create transporter if email credentials are available
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.log('Email credentials not available - using manual email mode');
-        return null;
-    }
+// Simple manual email function
+function sendManualEmail() {
+    const responseId = document.getElementById('response-id')?.textContent || Date.now();
+    const categoryScores = window.categoryCounters || { A: 0, B: 0, C: 0 };
+    const dominantCategory = getDominantCategory();
     
-    return nodemailer.createTransporter({
-        service: 'gmail',
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS
-        }
-    });
+    const subject = `Attachment Style Results - ${responseId}`;
+    const body = `
+My Attachment Style Assessment Results:
+
+Scores:
+- Anxious (A): ${categoryScores.A}
+- Secure (B): ${categoryScores.B}
+- Avoidant (C): ${categoryScores.C}
+
+Dominant Style: ${dominantCategory}
+
+Response ID: ${responseId}
+    `.trim();
+    
+    window.location.href = `mailto:${HARD_CODED_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-// Routes
+// Manual email fallback option
+function showManualEmailOption(surveyResults, responseId) {
+    const subject = `Attachment Style Assessment Results - ${responseId}`;
+    const emailBody = createEmailBody(surveyResults, responseId);
+    
+    showEmailStatus(`
+        <div style="text-align: center;">
+            <h3 style="color: #f39c12; margin-bottom: 15px;">📧 Manual Email Required</h3>
+            <p><strong>Please send your results manually:</strong></p>
+            
+            <button onclick="sendManualEmail()" 
+                    style="margin: 10px; padding: 12px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                📧 Open Email Client
+            </button>
+            
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+                <p><strong>Recipient:</strong> ${HARD_CODED_EMAIL}</p>
+                <p><strong>Subject:</strong> ${subject}</p>
+            </div>
+        </div>
+    `, 'info');
+}
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        dataFile: dataFile,
-        responses: readSurveyData().length,
-        emailConfigured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS)
-    });
-});
+// Email body creation
+function createEmailBody(results, responseId) {
+    const safeResults = results || {};
+    const categoryScores = safeResults.categoryScores || { A: 0, B: 0, C: 0 };
+    const dominantCategory = safeResults.dominantCategory || 'Unknown';
+    const totalYes = safeResults.totalYes || 0;
+    const totalNo = safeResults.totalNo || 0;
+    const totalQuestions = safeResults.totalQuestions || 0;
+    
+    return `ATTACHMENT STYLE ASSESSMENT RESULTS
 
-// Submit survey response
-app.post('/api/survey', async (req, res) => {
-    try {
-        console.log('Received survey submission');
-        
-        const { answers, categoryScores, totalScoreA, totalScoreB, totalScoreC, dominantCategory, totalYes, totalNo } = req.body;
-        
-        if (!answers || Object.keys(answers).length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'No survey answers received'
-            });
-        }
+RESPONSE ID: ${responseId}
+DATE: ${new Date().toLocaleString()}
 
-        // Create response object
-        const responseData = {
-            id: 'resp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            timestamp: new Date().toISOString(),
-            answers: answers,
-            categoryScores: categoryScores || { A: 0, B: 0, C: 0 },
-            totalScoreA: totalScoreA || 0,
-            totalScoreB: totalScoreB || 0,
-            totalScoreC: totalScoreC || 0,
-            dominantCategory: dominantCategory || 'Unknown',
-            totalYes: totalYes || 0,
-            totalNo: totalNo || 0,
-            totalQuestions: Object.keys(answers).length,
-            userAgent: req.body.userAgent || req.get('User-Agent'),
-            ip: req.ip || req.connection.remoteAddress,
-            referrer: req.body.referrer || '',
-            pageUrl: req.body.pageUrl || ''
-        };
+YOUR SCORES:
+• Anxious (A): ${categoryScores.A}
+• Secure (B): ${categoryScores.B}  
+• Avoidant (C): ${categoryScores.C}
 
-        console.log('Processed response:', {
-            id: responseData.id,
-            totalAnswers: Object.keys(answers).length,
-            categoryScores: responseData.categoryScores,
-            dominantCategory: responseData.dominantCategory
-        });
+DOMINANT ATTACHMENT STYLE: ${dominantCategory}
 
-        // Read existing data
-        const existingData = readSurveyData();
-        
-        // Add new response
-        existingData.push(responseData);
-        
-        // Save to file
-        const writeSuccess = writeSurveyData(existingData);
-        
-        if (!writeSuccess) {
-            throw new Error('Failed to save data to file');
-        }
+SUMMARY:
+- Total Questions: ${totalQuestions}
+- Yes Answers: ${totalYes}
+- No Answers: ${totalNo}
+- Completion Rate: ${Math.round((totalYes / totalQuestions) * 100)}%
 
-        // Try to send email automatically
-        let emailResult = { success: false, error: 'Email not configured' };
-        
-        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-            emailResult = await sendSurveyEmail(responseData);
-        }
+This assessment was completed via the online Attachment Style Assessment tool.
 
-        res.json({
-            success: true,
-            message: 'Survey response saved successfully',
-            responseId: responseData.id,
-            timestamp: responseData.timestamp,
-            totalResponses: existingData.length,
-            scores: responseData.categoryScores,
-            dominantCategory: responseData.dominantCategory,
-            emailSent: emailResult.success,
-            emailError: emailResult.error
-        });
+--
+Please do not reply to this automated message.`;
+}
 
-    } catch (error) {
-        console.error('Error saving survey response:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error: ' + error.message
-        });
+// Email status display function
+function showEmailStatus(message, type) {
+    const statusElement = document.getElementById('email-submission-status');
+    const colors = {
+        error: '#e74c3c',
+        success: '#27ae60',
+        loading: '#f39c12',
+        info: '#3498db'
+    };
+    
+    statusElement.innerHTML = '';
+    
+    if (message) {
+        statusElement.innerHTML = `
+            <div style="padding: 15px; border-radius: 8px; background: ${colors[type]}20; color: ${colors[type]}; border-left: 4px solid ${colors[type]}; margin: 10px 0;">
+                ${message}
+            </div>
+        `;
     }
-});
+}
 
-// Email sending function
-async function sendSurveyEmail(surveyData) {
-    try {
-        const transporter = createTransporter();
-        if (!transporter) {
-            return { success: false, error: 'Email transporter not available' };
+function showThankYouScreen(result) {
+    document.getElementById('survey-form').classList.remove('active');
+    document.getElementById('thank-you-screen').classList.add('active');
+    
+    // Remove Enter key listener on thank you screen
+    document.removeEventListener('keydown', enterKeyHandler);
+    
+    displayCategoryResults();
+    
+    const messageElement = document.getElementById('submission-message');
+    const responseIdElement = document.getElementById('response-id');
+    
+    if (messageElement) {
+        if (result.emailSent) {
+            messageElement.innerHTML = '✅ <strong>Assessment Complete!</strong> Your results have been processed and emailed.';
+        } else {
+            messageElement.innerHTML = '⚠️ <strong>Assessment Complete!</strong> Your results have been processed. Please use manual email option.';
         }
+    }
+    
+    if (responseIdElement && result.responseId) {
+        responseIdElement.textContent = result.responseId;
+    }
+    
+    loadStatistics();
+    showResponseCount();
+}
 
-        await transporter.verify();
-
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: process.env.EMAIL_TO || process.env.EMAIL_USER,
-            subject: `📊 Attachment Style Results - ${surveyData.id}`,
-            html: `
-                <div style="font-family: Arial, sans-serif; padding: 20px;">
-                    <h2>Attachment Style Assessment Results</h2>
-                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
-                        <p><strong>Response ID:</strong> ${surveyData.id}</p>
-                        <p><strong>Date:</strong> ${new Date(surveyData.timestamp).toLocaleString()}</p>
-                    </div>
-                    <h3>Your Scores:</h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 15px 0;">
-                        <div style="text-align: center; padding: 10px; background: #e74c3c; color: white; border-radius: 5px;">
-                            <div style="font-size: 24px; font-weight: bold;">${surveyData.categoryScores?.A || 0}</div>
-                            <div>Anxious (A)</div>
-                        </div>
-                        <div style="text-align: center; padding: 10px; background: #27ae60; color: white; border-radius: 5px;">
-                            <div style="font-size: 24px; font-weight: bold;">${surveyData.categoryScores?.B || 0}</div>
-                            <div>Secure (B)</div>
-                        </div>
-                        <div style="text-align: center; padding: 10px; background: #3498db; color: white; border-radius: 5px;">
-                            <div style="font-size: 24px; font-weight: bold;">${surveyData.categoryScores?.C || 0}</div>
-                            <div>Avoidant (C)</div>
-                        </div>
-                    </div>
-                    <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                        <strong>Dominant Style:</strong> ${surveyData.dominantCategory || 'Unknown'}
-                    </div>
-                    <p><strong>Summary:</strong> ${surveyData.totalYes || 0} Yes, ${surveyData.totalNo || 0} No out of ${surveyData.totalQuestions || 0} questions</p>
-                    <p>This assessment was completed via the Attachment Style Assessment tool.</p>
+function displayCategoryResults() {
+    const resultsContainer = document.getElementById('category-results');
+    if (!resultsContainer) return;
+    
+    const dominantCategory = getDominantCategory();
+    const categoryLabels = {
+        A: 'Anxious Attachment Style',
+        B: 'Secure Attachment Style', 
+        C: 'Avoidant Attachment Style',
+        Mixed: 'Mixed Attachment Style'
+    };
+    
+    const categoryDescriptions = {
+        A: 'You may experience anxiety in relationships and seek high levels of intimacy and approval.',
+        B: 'You feel comfortable with intimacy and are generally warm and loving in relationships.',
+        C: 'You value independence and may feel uncomfortable with too much closeness.',
+        Mixed: 'You show characteristics of multiple attachment styles.'
+    };
+    
+    resultsContainer.innerHTML = `
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+            <h3>📊 Your Attachment Style Results</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #e74c3c;">
+                    <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">${categoryCounters.A}</div>
+                    <div style="font-size: 14px; color: #666;">Anxious (A)</div>
                 </div>
-            `
-        };
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #27ae60;">
+                    <div style="font-size: 24px; font-weight: bold; color: #27ae60;">${categoryCounters.B}</div>
+                    <div style="font-size: 14px; color: #666;">Secure (B)</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #3498db;">
+                    <div style="font-size: 24px; font-weight: bold; color: #3498db;">${categoryCounters.C}</div>
+                    <div style="font-size: 14px; color: #666;">Avoidant (C)</div>
+                </div>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #f39c12;">
+                <strong>Dominant Style: ${categoryLabels[dominantCategory] || 'Mixed'}</strong>
+                <p style="margin: 10px 0 0 0; font-size: 14px; color: #666;">
+                    ${categoryDescriptions[dominantCategory] || 'You show characteristics of multiple attachment styles.'}
+                </p>
+            </div>
+        </div>
+    `;
+}
 
-        const result = await transporter.sendMail(mailOptions);
-        console.log('Email sent successfully:', result.messageId);
+function showErrorScreen(errorMessage) {
+    document.getElementById('survey-form').classList.remove('active');
+    document.getElementById('thank-you-screen').classList.add('active');
+    
+    document.removeEventListener('keydown', enterKeyHandler);
+    
+    const messageElement = document.getElementById('submission-message');
+    if (messageElement) {
+        messageElement.innerHTML = `⚠️ <strong>Saved Locally:</strong> Response saved to browser (${errorMessage}).`;
+    }
+    
+    displayCategoryResults();
+    showResponseCount();
+}
+
+async function loadStatistics() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/stats`);
+        const result = await response.json();
         
-        return { success: true, messageId: result.messageId };
-        
+        if (result.success) {
+            displayStatistics(result.stats);
+        }
     } catch (error) {
-        console.error('Email sending failed:', error.message);
-        return { success: false, error: error.message };
+        console.error('Failed to load statistics:', error);
     }
 }
 
-// Get all survey responses (for admin)
-app.get('/api/responses', (req, res) => {
-    try {
-        const data = readSurveyData();
-        
-        res.json({
-            success: true,
-            data: data,
-            count: data.length,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('Error loading responses:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to load responses'
-        });
-    }
-});
-
-// Get survey statistics
-app.get('/api/stats', (req, res) => {
-    try {
-        const data = readSurveyData();
-        
-        const stats = {
-            totalResponses: data.length,
-            averageScores: { A: 0, B: 0, C: 0 },
-            dominantCategories: { A: 0, B: 0, C: 0, Mixed: 0, Unknown: 0 },
-            recentSubmissions: data.slice(-10).reverse()
-        };
-        
-        if (data.length > 0) {
-            const totalA = data.reduce((sum, resp) => sum + (resp.totalScoreA || 0), 0);
-            const totalB = data.reduce((sum, resp) => sum + (resp.totalScoreB || 0), 0);
-            const totalC = data.reduce((sum, resp) => sum + (resp.totalScoreC || 0), 0);
-            
-            stats.averageScores.A = (totalA / data.length).toFixed(2);
-            stats.averageScores.B = (totalB / data.length).toFixed(2);
-            stats.averageScores.C = (totalC / data.length).toFixed(2);
-            
-            data.forEach(response => {
-                const category = response.dominantCategory || 'Unknown';
-                stats.dominantCategories[category] = (stats.dominantCategories[category] || 0) + 1;
-            });
-        }
-        
-        res.json({
-            success: true,
-            stats: stats
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to calculate statistics'
-        });
-    }
-});
-
-// Download responses as CSV
-app.get('/api/responses/csv', (req, res) => {
-    try {
-        const data = readSurveyData();
-        
-        if (data.length === 0) {
-            return res.status(404).json({ error: 'No data available' });
-        }
-        
-        const headers = ['ID', 'Timestamp', 'Score A', 'Score B', 'Score C', 'Dominant Category', 'Total Yes', 'Total No', 'Total Questions'];
-        let csv = headers.join(',') + '\n';
-        
-        data.forEach(item => {
-            const row = [
-                `"${item.id || ''}"`,
-                `"${item.timestamp || ''}"`,
-                item.totalScoreA || 0,
-                item.totalScoreB || 0,
-                item.totalScoreC || 0,
-                `"${item.dominantCategory || 'Unknown'}"`,
-                item.totalYes || 0,
-                item.totalNo || 0,
-                item.totalQuestions || 0
-            ];
-            csv += row.join(',') + '\n';
-        });
-        
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=attachment-survey-responses-${Date.now()}.csv`);
-        res.send(csv);
-        
-    } catch (error) {
-        console.error('Error generating CSV:', error);
-        res.status(500).json({ error: 'Failed to generate CSV' });
-    }
-});
-
-// Simple email sending endpoint (for manual trigger)
-app.post('/api/send-email', async (req, res) => {
-    try {
-        const { results, responseId } = req.body;
-        
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-            return res.json({
-                success: false,
-                error: 'Email service not configured on server'
-            });
-        }
-
-        const emailResult = await sendSurveyEmail({
-            id: responseId,
-            timestamp: new Date().toISOString(),
-            ...results
-        });
-
-        res.json(emailResult);
-        
-    } catch (error) {
-        console.error('Email sending failed:', error);
-        res.json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// Email status endpoint (simple version)
-app.get('/api/email-status/:responseId', (req, res) => {
-    // For now, just return a simple status
-    // In a real app, you'd track email sending status in a database
-    res.json({
-        success: true,
-        emailStatus: {
-            responseId: req.params.responseId,
-            success: false,
-            error: 'Email status tracking not implemented',
-            timestamp: new Date().toISOString()
-        }
-    });
-});
-
-// Resend email endpoint
-app.post('/api/resend-email', async (req, res) => {
-    try {
-        const { responseId } = req.body;
-        
-        // Find the original response
-        const data = readSurveyData();
-        const originalResponse = data.find(r => r.id === responseId);
-        
-        if (!originalResponse) {
-            return res.status(404).json({
-                success: false,
-                error: 'Response not found'
-            });
-        }
-
-        const emailResult = await sendSurveyEmail(originalResponse);
-
-        res.json({
-            success: true,
-            emailResent: emailResult.success,
-            messageId: emailResult.messageId
-        });
-
-    } catch (error) {
-        console.error('Email resend error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to resend email'
-        });
-    }
-});
-
-// Serve the main page
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
-    res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-    });
-});
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        error: 'Endpoint not found'
-    });
-});
-
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Attachment Survey server running on port ${PORT}`);
-    console.log(`📊 Access the survey at: http://localhost:${PORT}`);
-    console.log(`🔧 API health check: http://localhost:${PORT}/api/health`);
-    console.log(`📈 View stats: http://localhost:${PORT}/api/stats`);
-    console.log(`📧 Email configured: ${!(process.env.EMAIL_USER && process.env.EMAIL_PASS) ? 'NO - Using manual mode' : 'YES'}`);
+function displayStatistics(stats) {
+    const statsElement = document.getElementById('response-stats');
+    if (!statsElement) return;
     
-    const data = readSurveyData();
-    console.log(`💾 Loaded ${data.length} existing survey responses`);
-});
+    statsElement.innerHTML = `
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 15px 0;">
+            <h4>📊 Survey Statistics</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 24px; font-weight: bold; color: #3498db;">${stats.totalResponses || 0}</div>
+                    <div style="font-size: 12px; color: #666;">Total Responses</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 24px; font-weight: bold; color: #27ae60;">${stats.totalEmailsSent || 0}</div>
+                    <div style="font-size: 12px; color: #666;">Emails Sent</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function showResponseCount() {
+    try {
+        const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
+        const countElement = document.getElementById('response-count');
+        if (countElement) {
+            countElement.innerHTML = `
+                <div style="font-size: 0.9em; color: #666; margin-top: 10px;">
+                    <div>📊 Total Local Responses: ${responses.length}</div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error showing response count:', error);
+    }
+}
+
+// Initialize
+showQuestion(0);
