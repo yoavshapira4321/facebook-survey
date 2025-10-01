@@ -49,78 +49,34 @@
 
     <div id="thank-you-screen" class="screen">
     <h1>Thank You! 📊</h1>
-    
+
     <p id="submission-message">Your attachment style assessment has been completed!</p>
     <p><strong>Response ID:</strong> <span id="response-id">Loading...</span></p>
     
-    <!-- Email sending status -->
-    <div id="email-submission-status" style="margin: 20px 0;"></div>
-    
-    <!-- Email links container -->
-    <div id="email-links" style="margin: 15px 0;"></div>
-    
-    <!-- Email instructions -->
-    <div id="email-instructions" style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #3498db;">
-        <h4>📧 How to Send Your Results:</h4>
-        <ol style="text-align: left; margin: 10px 0; padding-left: 20px;">
-            <li>Click the "Send Results via Email" button above</li>
-            <li>Your email app will open with results pre-filled</li>
-            <li>Review the email and click <strong>SEND</strong></li>
-            <li>That's it! Your results will be delivered to our team</li>
-        </ol>
+    <!-- Email Results Section -->
+    <div id="email-results-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+        <h3>📧 Receive Your Detailed Results</h3>
+        <p>Click below to send your comprehensive attachment style analysis to our team:</p>
+        
+        <button 
+            onclick="sendResultsToEmail()" 
+            id="email-results-btn"
+            style="padding: 15px 25px; background: #ea4335; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; gap: 10px;"
+        >
+            <span>📨</span>
+            Send Results to Our Team
+        </button>
+        
+        <p style="font-size: 12px; color: #666; margin: 10px 0;">
+            💡 Our relationship experts will review your results and may follow up with personalized insights.
+        </p>
+        
+        <div id="email-submission-status" style="margin-top: 15px;"></div>
     </div>
 
-    <!-- Category Results Display -->
-    <div id="category-results"></div>
-    
-    <!-- Attachment Style Descriptions -->
-    <div style="margin: 20px 0;">
-        <h3>📖 Understanding Your Attachment Style</h3>
-        
-        <div style="margin: 15px 0; padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
-            <h4 style="color: #856404; margin-bottom: 10px;">חרדתי (A)</h4>
-            <p style="margin: 0; color: #856404;">
-                מחפש קרבה ואינטימיות גבוהה, אך חושש מדחייה ונוטה לפרש את התנהגות בן/בת הזוג באופן אישי. 
-                חווה רגשות שליליים רבים במערכת היחסים, נוטה להתעצבן ולהגיב באימפולסיביות, אך מרגיש בטוח יותר עם הרבה ביטחון והרגעה מהצד השני.
-            </p>
-        </div>
-        
-        <div style="margin: 15px 0; padding: 15px; background: #d1ecf1; border-radius: 8px; border-left: 4px solid #17a2b8;">
-            <h4 style="color: #0c5460; margin-bottom: 10px;">בטוח (B)</h4>
-            <p style="margin: 0; color: #0c5460;">
-                חש בנוחות עם אינטימיות, מתקשר בפתיחות וביעילות, מגיב לרגשות בן/בת הזוג, משתף חוויות ותומך בעת הצורך. 
-                רגוע יחסית בנושאי קשר ואינו נבהל מקונפליקטים.
-            </p>
-        </div>
-        
-        <div style="margin: 15px 0; padding: 15px; background: #d4edda; border-radius: 8px; border-left: 4px solid #28a745;">
-            <h4 style="color: #155724; margin-bottom: 10px;">נמנע (C)</h4>
-            <p style="margin: 0; color: #155724;">
-                מעריך מאוד עצמאות ואוטונומיה, מעדיף לשמור מרחק רגשי, מתקשה בפתיחות ובקִרבה עמוקה, 
-                לא מתמקד הרבה בדאגה לקשר או לדחייה, ולעיתים בן/בת הזוג חשים שהוא/היא מרוחק/ת רגשית.
-            </p>
-        </div>
-    </div>
 
-    <!-- Response Statistics -->
-    <div id="response-stats" style="margin: 15px 0;"></div>
-
-    <!-- Social Sharing Options -->
-    <div class="share-options" style="margin: 20px 0; text-align: center;">
-        <h3>🔗 Share This Assessment</h3>
-        <button onclick="shareOnFacebook()" class="share-btn" style="background: #1877f2; margin: 5px;">
-            Share on Facebook
-        </button>
-        <button onclick="shareOnTwitter()" class="share-btn" style="background: #1da1f2; margin: 5px;">
-            Share on Twitter
-        </button>
-        <button onclick="copySurveyLink()" class="share-btn" style="background: #666; margin: 5px;">
-            Copy Survey Link
-        </button>
-    </div>
-
-    <!-- Facebook Address Section (Optional) -->
-    <div id="facebook-address-section" style="display: none; margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <!-- Facebook Address Input -->
+    <div id="facebook-address-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
         <h3>📬 Get Your Results on Facebook</h3>
         <p>Enter your Facebook profile link to receive your detailed results:</p>
         
@@ -128,7 +84,7 @@
             <input 
                 type="text" 
                 id="facebook-address" 
-                placeholder="https://facebook.com/yourprofile"
+                placeholder="https://facebook.com/yourprofile or https://fb.com/yourprofile"
                 style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;"
             >
             <button 
@@ -139,21 +95,39 @@
             </button>
         </div>
         
+        <p style="font-size: 12px; color: #666; margin: 5px 0;">
+            💡 <strong>How to find your Facebook profile link:</strong><br>
+            • Go to your Facebook profile<br>
+            • Copy the URL from your browser's address bar<br>
+            • It should look like: <code>https://facebook.com/your.name</code>
+        </p>
+        
         <div id="facebook-submission-status" style="margin-top: 10px;"></div>
     </div>
+    
+    <!-- Added text paragraph -->
+    <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+        חרדתי (A) – מחפש קרבה ואינטימיות גבוהה, אך חושש מדחייה ונוטה לפרש את התנהגות בן/בת הזוג באופן אישי. חווה רגשות שליליים רבים במערכת היחסים, נוטה להתעצבן ולהגיב באימפולסיביות, אך מרגיש בטוח יותר עם הרבה ביטחון והרגעה מהצד השני.
+    </p>
+        <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+        בטוח (B) – חש בנוחות עם אינטימיות, מתקשר בפתיחות וביעילות, מגיב לרגשות בן/בת הזוג, משתף חוויות ותומך בעת הצורך. רגוע יחסית בנושאי קשר ואינו נבהל מקונפליקטים.
+    </p>
+        <p style="margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+        נמנע (C) – מעריך מאוד עצמאות ואוטונומיה, מעדיף לשמור מרחק רגשי, מתקשה בפתיחות ובקִרבה עמוקה, לא מתמקד הרבה בדאגה לקשר או לדחייה, ולעיתים בן/בת הזוג חשים שהוא/היא מרוחק/ת רגשית.
+    </p>
+    
+    <!-- Add this container for category results -->
+    <div id="category-results"></div>
+    
+    <div id="response-stats" style="margin: 15px 0;"></div>
+    
 
-    <!-- Admin Panel (Hidden by default) -->
+    <!-- Admin Panel -->
     <div id="admin-panel" style="display: none; margin-top: 30px; padding: 15px; background: #f5f5f5; border-radius: 10px;">
         <h3>📊 Admin Panel</h3>
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <button onclick="downloadResponses()" style="padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                Download Responses (CSV)
-            </button>
-            <button onclick="clearResponses()" style="padding: 10px 15px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                Clear Local Responses
-            </button>
-        </div>
-        <div id="response-count" style="font-size: 14px; color: #666;"></div>
+        <button onclick="downloadResponses()" style="background: #28a745;">Download Responses (CSV)</button>
+        <button onclick="clearResponses()" style="background: #dc3545;">Clear Local Responses</button>
+        <div id="response-count" style="margin-top: 10px; font-size: 14px;"></div>
     </div>
 </div>
     </div>

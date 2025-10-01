@@ -6,6 +6,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+
+console.log('=== ENVIRONMENT VARIABLES ===');
+console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET');
+console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'SET' : 'NOT SET');
+console.log('EMAIL_TO:', process.env.EMAIL_TO ? 'SET' : 'NOT SET');
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
