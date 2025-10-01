@@ -2,10 +2,86 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer'); // Make sure this is at the top
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const nodemailer = require('nodemailer');
+// ... your existing middleware and setup ...
+
+// ========== ADD THE sendSurveyEmail FUNCTION HERE ==========
+// Email sending function with detailed logging
+async function sendSurveyEmail(surveyData) {
+    console.log('=== EMAIL DEBUG INFO ===');
+    console.log('1. Checking environment variables...');
+    console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET');
+    console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'SET' : 'NOT SET');
+    console.log('EMAIL_TO:', process.env.EMAIL_TO ? 'SET' : 'NOT SET');
+    
+    try {
+        // Check if email credentials are available
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.log('❌ Email credentials missing');
+            return { success: false, error: 'Email credentials not configured' };
+        }
+
+        console.log('2. Creating email transporter...');
+        const transporter = nodemailer.createTransporter({
+            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
+
+        console.log('3. Verifying SMTP connection...');
+        await transporter.verify();
+        console.log('✅ SMTP connection verified');
+
+        console.log('4. Preparing email content...');
+        const mailOptions = {
+            from: `"Attachment Survey" <${process.env.EMAIL_USER}>`,
+            to: process.env.EMAIL_TO || process.env.EMAIL_USER,
+            subject: `📊 Attachment Style Results - ${surveyData.id}`,
+            text: `Attachment Style Assessment Results\n\nResponse ID: ${surveyData.id}\nScores: A:${surveyData.categoryScores?.A} B:${surveyData.categoryScores?.B} C:${surveyData.categoryScores?.C}\nDominant: ${surveyData.dominantCategory}`,
+            html: `
+                <h2>Attachment Style Assessment Results</h2>
+                <p><strong>Response ID:</strong> ${surveyData.id}</p>
+                <p><strong>Scores:</strong> A:${surveyData.categoryScores?.A} B:${surveyData.categoryScores?.B} C:${surveyData.categoryScores?.C}</p>
+                <p><strong>Dominant Style:</strong> ${surveyData.dominantCategory}</p>
+            `
+        };
+
+        console.log('5. Sending email...');
+        const result = await transporter.sendMail(mailOptions);
+        console.log('✅ Email sent successfully! Message ID:', result.messageId);
+        
+        return { success: true, messageId: result.messageId };
+        
+    } catch (error) {
+        console.log('❌ Email sending failed:');
+        console.log('Error name:', error.name);
+        console.log('Error message:', error.message);
+        console.log('Error code:', error.code);
+        
+        return { 
+            success: false, 
+            error: error.message,
+            code: error.code
+        };
+    }
+}
+// ========== END OF sendSurveyEmail FUNCTION ==========
+
+// ... your existing routes (app.get, app.post, etc.) ...
+
+// In your survey submission route, call the function:
+
 
 // Email configuration
 function createTransporter() {
@@ -133,7 +209,6 @@ function writeSurveyData(data) {
     }
 }
 
-// Routes
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -147,14 +222,12 @@ app.get('/api/health', (req, res) => {
 });
 
 // Submit survey response - UPDATED FOR NEW SURVEY FORMAT
-app.post('/api/survey', (req, res) => {
+app.post('/api/survey', async (req, res) => {
     try {
         console.log('Received survey submission');
         
-        // NEW: Accept the new survey format with categories
         const { answers, categoryScores, totalScoreA, totalScoreB, totalScoreC, dominantCategory, totalYes, totalNo } = req.body;
         
-        // NEW VALIDATION: Check if we have answers
         if (!answers || Object.keys(answers).length === 0) {
             return res.status(400).json({
                 success: false,
@@ -162,11 +235,10 @@ app.post('/api/survey', (req, res) => {
             });
         }
 
-        // Create response object - UPDATED FOR NEW FORMAT
+        // Create response object
         const responseData = {
             id: 'resp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
             timestamp: new Date().toISOString(),
-            // New attachment style survey data
             answers: answers,
             categoryScores: categoryScores || { A: 0, B: 0, C: 0 },
             totalScoreA: totalScoreA || 0,
@@ -176,7 +248,6 @@ app.post('/api/survey', (req, res) => {
             totalYes: totalYes || 0,
             totalNo: totalNo || 0,
             totalQuestions: Object.keys(answers).length,
-            // Technical info
             userAgent: req.body.userAgent || req.get('User-Agent'),
             ip: req.ip || req.connection.remoteAddress,
             referrer: req.body.referrer || '',
@@ -203,6 +274,12 @@ app.post('/api/survey', (req, res) => {
             throw new Error('Failed to save data to file');
         }
 
+        // ========== CALL THE EMAIL FUNCTION HERE ==========
+        console.log('Attempting to send email...');
+        const emailResult = await sendSurveyEmail(responseData);
+        console.log('Email result:', emailResult);
+        // ========== END OF EMAIL CALL ==========
+
         res.json({
             success: true,
             message: 'Survey response saved successfully',
@@ -210,7 +287,10 @@ app.post('/api/survey', (req, res) => {
             timestamp: responseData.timestamp,
             totalResponses: existingData.length,
             scores: responseData.categoryScores,
-            dominantCategory: responseData.dominantCategory
+            dominantCategory: responseData.dominantCategory,
+            emailSent: emailResult.success,
+            emailError: emailResult.error,
+            emailMessageId: emailResult.messageId
         });
 
     } catch (error) {
