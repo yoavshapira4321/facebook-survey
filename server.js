@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 // ========== ADD THE sendSurveyEmail FUNCTION HERE ==========
 // Email sending function with detailed logging
+// Email sending function with detailed logging
 async function sendSurveyEmail(surveyData) {
     console.log('=== EMAIL DEBUG INFO ===');
     console.log('1. Checking environment variables...');
@@ -76,14 +77,7 @@ async function sendSurveyEmail(surveyData) {
         };
     }
 }
-// ========== END OF sendSurveyEmail FUNCTION ==========
 
-// ... your existing routes (app.get, app.post, etc.) ...
-
-// In your survey submission route, call the function:
-
-
-// Email configuration
 function createTransporter() {
     return nodemailer.createTransporter({
         service: 'gmail',
@@ -95,6 +89,57 @@ function createTransporter() {
 }
 
 // Email sending endpoint
+
+// Test email endpoint
+app.get('/api/test-email', async (req, res) => {
+    try {
+        console.log('=== TESTING EMAIL CONFIGURATION ===');
+        
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            return res.json({
+                success: false,
+                error: 'Email credentials not set in environment variables',
+                EMAIL_USER: process.env.EMAIL_USER ? 'SET' : 'NOT SET',
+                EMAIL_PASS: process.env.EMAIL_PASS ? 'SET' : 'NOT SET'
+            });
+        }
+
+        const transporter = nodemailer.createTransporter({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
+
+        await transporter.verify();
+        
+        // Try to send a test email
+        const testResult = await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: process.env.EMAIL_TO,
+            subject: 'Test Email from Survey App',
+            text: 'This is a test email to verify configuration.'
+        });
+
+        res.json({
+            success: true,
+            message: 'Email configuration is working!',
+            messageId: testResult.messageId
+        });
+
+    } catch (error) {
+        console.error('Email test failed:', error);
+        res.json({
+            success: false,
+            error: error.message,
+            code: error.code,
+            solution: 'Check Gmail App Password and Less Secure Apps setting'
+        });
+    }
+});
+
+
 app.post('/api/send-email', async (req, res) => {
     try {
         const { results, responseId } = req.body;
