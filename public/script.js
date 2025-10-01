@@ -792,6 +792,29 @@ function convertToCSV(objArray) {
     return str;
 }
 
+// Simple manual email function
+function sendManualEmail() {
+    const responseId = document.getElementById('response-id')?.textContent || Date.now();
+    const categoryScores = window.categoryCounters || { A: 0, B: 0, C: 0 };
+    const dominantCategory = getDominantCategory();
+    
+    const subject = `Attachment Style Results - ${responseId}`;
+    const body = `
+My Attachment Style Assessment Results:
+
+Scores:
+- Anxious (A): ${categoryScores.A}
+- Secure (B): ${categoryScores.B}
+- Avoidant (C): ${categoryScores.C}
+
+Dominant Style: ${dominantCategory}
+
+Response ID: ${responseId}
+    `.trim();
+    
+    window.location.href = `mailto:yoavshapira4321@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 function clearResponses() {
     if (confirm('Are you sure you want to clear all LOCAL responses? This will not affect server data.')) {
         localStorage.removeItem('surveyResponses');
